@@ -1,0 +1,128 @@
+================================================================================
+  TRADE DURATION ANALYSIS
+  Michele Piazzoli — Data Analysis
+================================================================================
+
+  This report analyzes how long trades stay open, measured
+  in minutes from entry to exit.
+
+────────────────────────────────────────────────────────────
+  ALL TRADES
+────────────────────────────────────────────────────────────
+  Count:                    948 trades
+
+  Mean (average duration):  169.0 minutes
+    The arithmetic average of all trade durations.
+
+  Median (middle value):    30.0 minutes
+    Half of all trades lasted less than this, half lasted
+    more. Not affected by outliers like very long trades.
+
+  Standard Deviation:       555.3 minutes
+    Measures how spread out the durations are. A high value
+    means trade durations vary a lot from trade to trade.
+
+  Minimum Duration:         5.0 minutes
+    The shortest trade in this category.
+
+  Maximum Duration:         4455.0 minutes
+    The longest trade in this category.
+
+  Skewness:                 5.1095
+    Measures asymmetry. Positive skew means most trades
+    are short but a few last much longer (right tail).
+    Negative skew would mean the opposite.
+
+  Percentiles (what percentage of trades are below this duration):
+    10th percentile:  5.0 minutes
+    25th percentile:  15.0 minutes
+    50th percentile:  30.0 minutes  (same as the median)
+    75th percentile:  75.0 minutes
+    90th percentile:  211.5 minutes
+    95th percentile:  626.0 minutes
+    99th percentile:  3134.1 minutes
+
+────────────────────────────────────────────────────────────
+  WINNING TRADES
+────────────────────────────────────────────────────────────
+  Count:                    332 trades
+
+  Mean (average duration):  242.7 minutes
+    The arithmetic average of all trade durations.
+
+  Median (middle value):    55.0 minutes
+    Half of all trades lasted less than this, half lasted
+    more. Not affected by outliers like very long trades.
+
+  Standard Deviation:       661.4 minutes
+    Measures how spread out the durations are. A high value
+    means trade durations vary a lot from trade to trade.
+
+  Minimum Duration:         5.0 minutes
+    The shortest trade in this category.
+
+  Maximum Duration:         3745.0 minutes
+    The longest trade in this category.
+
+  Skewness:                 4.0946
+    Measures asymmetry. Positive skew means most trades
+    are short but a few last much longer (right tail).
+    Negative skew would mean the opposite.
+
+  Percentiles (what percentage of trades are below this duration):
+    10th percentile:  15.0 minutes
+    25th percentile:  25.0 minutes
+    50th percentile:  55.0 minutes  (same as the median)
+    75th percentile:  120.0 minutes
+    90th percentile:  379.5 minutes
+    95th percentile:  869.2 minutes
+    99th percentile:  3251.8 minutes
+
+────────────────────────────────────────────────────────────
+  LOSING TRADES
+────────────────────────────────────────────────────────────
+  Count:                    616 trades
+
+  Mean (average duration):  129.3 minutes
+    The arithmetic average of all trade durations.
+
+  Median (middle value):    25.0 minutes
+    Half of all trades lasted less than this, half lasted
+    more. Not affected by outliers like very long trades.
+
+  Standard Deviation:       484.5 minutes
+    Measures how spread out the durations are. A high value
+    means trade durations vary a lot from trade to trade.
+
+  Minimum Duration:         5.0 minutes
+    The shortest trade in this category.
+
+  Maximum Duration:         4455.0 minutes
+    The longest trade in this category.
+
+  Skewness:                 6.0497
+    Measures asymmetry. Positive skew means most trades
+    are short but a few last much longer (right tail).
+    Negative skew would mean the opposite.
+
+  Percentiles (what percentage of trades are below this duration):
+    10th percentile:  5.0 minutes
+    25th percentile:  10.0 minutes
+    50th percentile:  25.0 minutes  (same as the median)
+    75th percentile:  60.0 minutes
+    90th percentile:  150.0 minutes
+    95th percentile:  273.8 minutes
+    99th percentile:  3034.2 minutes
+
+────────────────────────────────────────────────────────────
+  DURATION BUCKETS
+────────────────────────────────────────────────────────────
+  Trades grouped by how long they lasted:
+
+      5-15 min  |   215 trades  |  Win Rate:  14.4%  |  Total PnL:   $-275,993.06
+     15-30 min  |   224 trades  |  Win Rate:  30.4%  |  Total PnL:    $+16,240.86
+     30-60 min  |   190 trades  |  Win Rate:  37.9%  |  Total PnL:   $+173,928.84
+     1-2 hours  |   153 trades  |  Win Rate:  49.7%  |  Total PnL:   $+304,939.54
+     2-5 hours  |    97 trades  |  Win Rate:  47.4%  |  Total PnL:   $+214,343.60
+    5-10 hours  |    20 trades  |  Win Rate:  65.0%  |  Total PnL:    $+72,985.53
+     10+ hours  |    49 trades  |  Win Rate:  53.1%  |  Total PnL:    $+93,885.23
