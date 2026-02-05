@@ -1,0 +1,114 @@
+================================================================================
+  OVERALL PERFORMANCE SUMMARY
+  Michele Piazzoli — Data Analysis
+================================================================================
+
+────────────────────────────────────────────────────────────
+  STRATEGY SETTINGS (auto-detected from trade data)
+────────────────────────────────────────────────────────────
+  Initial Balance:             $+100,000.00
+  Backtest Period:             2024-01-03 to 2026-01-29
+  Total Months:                25
+  Session Window:              14:00 - 21:00
+  Directions Traded:           SHORT, LONG
+  Average Reward to Risk:      1:2.50
+  Active Trading Hours:        14:00-15:00, 15:00-16:00, 16:00-17:00, 17:00-18:00, 18:00-19:00, 19:00-20:00, 20:00-21:00
+
+  Note: The Average Reward to Risk ratio represents the
+  average R-multiple of winning trades. For example, 1:2.50
+  means that on average each win returns 2.50x the amount
+  risked on that trade.
+
+────────────────────────────────────────────────────────────
+  CAPITAL
+────────────────────────────────────────────────────────────
+  Initial Balance:          $+100,000.00
+  Final Balance:            $+700,330.53
+  Total Profit and Loss:    $+600,330.54
+  Total Return:             +600.33%
+
+  Gross Profit:             $+2,264,556.39
+    (Sum of all winning trades only)
+  Gross Loss:               $-1,664,225.85
+    (Sum of all losing trades only)
+
+────────────────────────────────────────────────────────────
+  TRADE STATISTICS
+────────────────────────────────────────────────────────────
+  Total Trades:             948
+  Wins:                     332
+  Losses:                   616
+  Win Rate:                 35.02%
+  Profit Factor:            1.3607
+
+  Payoff Ratio:             2.5247
+    The Payoff Ratio measures how much you win on average
+    compared to how much you lose on average. A value of
+    2.52 means that each winning trade earns 2.52x
+    the size of each losing trade. A Payoff Ratio above 1.0
+    means wins are larger than losses on average.
+
+  Average Win:              $+6,820.95
+  Average Loss:             $-2,701.67
+
+  Median Win:               $+8,750.00
+  Median Loss:              $-3,500.00
+    The Median is the middle value when all trades are sorted
+    by size. Unlike the Average, the Median is not affected
+    by extreme outliers. If the Median Win is higher than the
+    Average Win, it means a few small wins are pulling the
+    average down. If lower, a few large wins inflate the average.
+
+  Largest Win:              $+8,750.00
+  Largest Loss:             $-3,500.00
+
+────────────────────────────────────────────────────────────
+  R-MULTIPLE ANALYSIS
+────────────────────────────────────────────────────────────
+  Average R-Multiple:       0.2257R
+  Median R-Multiple:        -1.0000R
+  Average Win (R):          2.5000R
+  Average Loss (R):         -1.0000R
+  Expectancy per trade ($): $+633.26
+  Expectancy per trade (R): 0.2257R
+  Kelly Criterion:          0.0928 (9.28%)
+
+────────────────────────────────────────────────────────────
+  RISK-ADJUSTED METRICS
+────────────────────────────────────────────────────────────
+  Sharpe Ratio:             0.1351
+
+  Sortino Ratio:            0.0000
+    The Sortino Ratio is similar to the Sharpe Ratio but only
+    penalizes downside volatility (losses). A value of 0.00
+    can occur when all losing trades have the same R-multiple
+    (e.g. all hit SL at exactly -1R), resulting in zero
+    downside deviation. This is actually a sign of disciplined
+    risk management with fixed stop-losses.
+
+  Calmar Ratio:             22.2314
+    The Calmar Ratio divides total return by maximum drawdown.
+    It tells you how much return you earned per unit of worst-
+    case pain. A value of 22.23 means you earned
+    22.2% return for every 1% of max drawdown.
+    Higher is better. Above 3.0 is considered excellent.
+
+  Maximum Drawdown ($):     $-57,750.00
+  Maximum Drawdown (%):     -27.00%
+
+────────────────────────────────────────────────────────────
+  DURATION AND ACTIVITY
+────────────────────────────────────────────────────────────
+  Average Trade Duration:   169.0 minutes
+  Average Win Duration:     242.7 minutes
+  Average Loss Duration:    129.3 minutes
+  Trading Days:             288
+  Average Trades per Day:   3.29
+
+────────────────────────────────────────────────────────────
+  CONSISTENCY
+────────────────────────────────────────────────────────────
+  Months in Profit:         24/25
+  Consistency Score:        96.0%
+  Best Month:               2025-11 with $+66,500.00
+  Worst Month:              2024-03 with $-21,355.86
