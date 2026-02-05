@@ -1,0 +1,270 @@
+================================================================================
+    [00] README — DRS ADVANCED EXPLANATION
+    Michele Piazzoli — Data Analysis
+================================================================================
+
+================================================================================
+  WHAT IS DRS?
+================================================================================
+
+DRS stands for Dynamic Risk System.
+
+It is a position sizing methodology designed for proprietary trading firm
+accounts, where capital preservation is as important as profit generation.
+
+The core idea is simple: risk should adapt to the account's current balance.
+================================================================================
+  THE ORIGINAL DRS FORMULA
+================================================================================
+
+The classic DRS formula:
+
+    Risk = (Current Balance - Floor) / Divisor
+
+Where:
+    - Current Balance = your account equity right now
+    - Floor = the minimum balance you cannot breach (e.g., $90,000 for a
+              $100,000 prop firm account with 10% max loss rule)
+    - Divisor = how many losing trades of margin you want to maintain
+                (default: 20)
+
+Example with a $100,000 account:
+
+    Balance: $100,000
+    Floor: $90,000
+    Divisor: 20
+
+    Risk = ($100,000 - $90,000) / 20 = $500 per trade
+
+If the balance grows to $110,000:
+
+    Risk = ($110,000 - $90,000) / 20 = $1,000 per trade
+
+If the balance drops to $95,000:
+
+    Risk = ($95,000 - $90,000) / 20 = $250 per trade
+
+The system automatically scales up during winning periods and scales down
+during drawdowns. This creates a natural compounding effect while protecting
+the account from catastrophic loss.
+
+Risk caps are applied, that change in base at the profile risk of each individual:
+    - Minimum: $100 (to ensure trades remain meaningful)
+    - Maximum: $3,500 (to prevent overexposure)
+
+================================================================================
+  WHY DRS WORKS
+================================================================================
+
+1. CAPITAL PRESERVATION
+   As the account approaches the loss limit, position sizes shrink
+   automatically. This extends the runway, giving the strategy more
+   trades to recover.
+
+2. COMPOUNDING GAINS
+   As profits accumulate, position sizes increase proportionally.
+   This accelerates growth without increasing relative risk.
+
+3. PSYCHOLOGICAL ALIGNMENT
+   The trader doesn't need to make discretionary sizing decisions.
+   The system handles it, removing emotional interference.
+
+4. PROP FIRM COMPLIANCE
+   Designed specifically for accounts with hard drawdown limits.
+   The divisor (e.g., 20) represents how many consecutive losses
+   the account can sustain before breaching the floor.
+
+
+================================================================================
+  WHAT THIS PROJECT CONTAINS
+================================================================================
+
+This project explores 5 variations of the DRS methodology, each with
+different risk profiles. The goal is to analyze how different approaches
+to dynamic sizing affect performance metrics on the same trade dataset.
+
+The input is a CSV file containing historical trades with their outcomes
+expressed as R-multiples (reward/risk ratios). The script replays these
+trades under each DRS variant and generates comprehensive reports.
+
+
+--------------------------------------------------------------------------------
+  MODE 1 — DIVISOR 15
+--------------------------------------------------------------------------------
+
+Formula: Risk = (Balance - Floor) / 15
+
+More aggressive than the standard DRS. By using a smaller divisor, each
+trade risks a larger portion of the available margin. This amplifies both
+gains and losses.
+
+Use case: Traders confident in their edge who want faster compounding.
+
+
+--------------------------------------------------------------------------------
+  MODE 2 — DIVISOR 13
+--------------------------------------------------------------------------------
+
+Formula: Risk = (Balance - Floor) / 13
+
+The most aggressive variant. Maximum acceleration of compounding, but also
+maximum sensitivity to drawdowns.
+
+Use case: High-conviction strategies with strong historical performance.
+
+
+--------------------------------------------------------------------------------
+  MODE 3 — DIVISOR 25
+--------------------------------------------------------------------------------
+
+Formula: Risk = (Balance - Floor) / 25
+
+Conservative approach. Smaller position sizes provide more runway during
+drawdowns and smoother equity curves.
+
+Use case: Risk-averse traders or strategies with lower win rates.
+
+
+--------------------------------------------------------------------------------
+  MODE 4 — ACTIVE (TRAILING FLOOR)
+--------------------------------------------------------------------------------
+
+Formula: Risk = (Balance - Dynamic Floor) / 20
+
+The floor is no longer static. It rises every time the account gains 10%
+from the initial capital.
+
+Example progression for a $100,000 account:
+    - Start: Floor = $90,000
+    - Balance reaches $110,000: Floor rises to $100,000
+    - Balance reaches $120,000: Floor rises to $110,000
+    - Balance reaches $130,000: Floor rises to $120,000
+
+The floor never decreases. Once a milestone is reached, the new floor
+is locked in permanently.
+
+This creates a "ratchet" effect that protects accumulated profits. If the
+balance drops from $125,000 back to $115,000, the floor remains at $110,000,
+not $90,000.
+
+Use case: Profit protection while maintaining dynamic sizing benefits.
+
+
+--------------------------------------------------------------------------------
+  MODE 5 — LOCK SCALE
+--------------------------------------------------------------------------------
+
+A hybrid system that switches between DRS and percentage-based risk
+depending on account performance.
+
+Tiers:
+    - Below 20% profit (< $120,000): Classic DRS with divisor 20
+    - 20% to 40% profit ($120,000 - $140,000): 1.5% of balance
+    - Above 40% profit (> $140,000): 2.0% of balance
+
+The logic: once the account has proven itself with significant gains,
+the dynamic scaling becomes less necessary. Switching to percentage-based
+risk simplifies the calculation while maintaining reasonable position sizes.
+
+Use case: Traders who want DRS protection early but prefer simpler
+sizing after reaching profitability milestones.
+
+
+================================================================================
+  OUTPUT FILES
+================================================================================
+
+For each mode, the script generates:
+
+1. trade_list.csv
+   Complete trade-by-trade breakdown including:
+   - Trade number
+   - Risk used ($)
+   - P/L result ($)
+   - Balance before trade
+   - Balance after trade
+
+2. report.txt
+   Text summary with key metrics:
+   - Total trades, wins, losses, win rate
+   - Total P/L and return percentage
+   - Average win and average loss
+   - Profit factor
+   - Maximum drawdown ($ and %)
+   - Risk statistics (average, min, max)
+
+3. analysis.pdf
+   Visual report with:
+   - Summary statistics cards
+   - Interactive equity curve chart
+   - Cumulative return chart
+   - Risk management metrics
+
+
+================================================================================
+  HOW TO USE
+================================================================================
+
+Requirements:
+    pip install pandas numpy
+
+Usage:
+    python3 drs_advanced.py <path_to_trades.csv>
+
+Input CSV format:
+    Must contain columns:
+    - P/L ($): the profit or loss of each trade
+    - Risk ($): the risk amount used for each trade
+    - Balance Pre ($): account balance before the trade (used for initial balance)
+
+Output:
+    Creates folder "DRS_Advanced/" with subfolders:
+    - Mode_1/
+    - Mode_2/
+    - Mode_3/
+    - Mode_4/
+    - Mode_5/
+
+    Each subfolder contains:
+    - trade_list.csv
+    - report.txt
+    - analysis.html
+
+
+================================================================================
+  CONFIGURATION
+================================================================================
+
+Default settings (can be modified in the script):
+
+    INITIAL_BALANCE = 100000    # Starting account size
+    FLOOR = 90000               # Loss limit (10% max drawdown)
+    MIN_RISK = 100              # Minimum risk per trade
+    MAX_RISK = 3500             # Maximum risk per trade
+
+
+================================================================================
+  INTERPRETING RESULTS
+================================================================================
+
+When comparing modes, focus on:
+
+1. TOTAL RETURN
+   Higher is better, but consider the risk taken to achieve it.
+
+2. MAXIMUM DRAWDOWN
+   Lower is better. This shows the worst peak-to-trough decline.
+   Critical for prop firm accounts with strict loss limits.
+
+3. PROFIT FACTOR
+   Gross profit / Gross loss. Above 1.5 is solid. Above 2.0 is excellent.
+
+4. AVERAGE RISK
+   Shows the typical position size. Higher average risk means more
+   aggressive compounding but also larger swings.
+
+5. FINAL BALANCE vs MAX DRAWDOWN RATIO
+   A $500,000 final balance means nothing if you experienced a $150,000
+   drawdown to get there. The ratio matters.
+
+================================================================================
