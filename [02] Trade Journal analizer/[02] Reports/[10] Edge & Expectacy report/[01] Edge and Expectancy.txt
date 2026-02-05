@@ -1,0 +1,62 @@
+================================================================================
+  EDGE AND EXPECTANCY DEEP DIVE
+  Michele Piazzoli — Data Analysis
+================================================================================
+
+  Expectancy tells you how much you can expect to make (or lose)
+  on every single trade on average. It is the mathematical edge
+  of the strategy.
+
+────────────────────────────────────────────────────────────
+  EXPECTANCY MODEL
+────────────────────────────────────────────────────────────
+
+  Win Rate:                     35.02%
+    Percentage of trades that hit take profit.
+
+  Average Win (R-Multiple):     2.5000R
+    On average, each winning trade returns 2.50 times
+    the amount risked.
+
+  Average Loss (R-Multiple):    1.0000R
+    On average, each losing trade loses 1.00 times
+    the amount risked.
+
+  Payoff Ratio:                 2.5000
+    Average Win divided by Average Loss in R terms.
+
+  Breakeven Win Rate:           28.57%
+    The minimum win rate needed to break even given this
+    payoff ratio. Any win rate above this means the strategy
+    has a positive edge.
+
+  Edge Over Breakeven:          +6.45%
+    How much the actual win rate exceeds the breakeven point.
+    This is the strategy's mathematical advantage.
+
+  Expectancy per Trade (R):     +0.2257R
+    On average, each trade is expected to return 0.2257
+    times the amount risked.
+
+  Expectancy per Trade ($):     $+633.26
+    The average dollar profit or loss per trade.
+
+────────────────────────────────────────────────────────────
+  EXPECTANCY BY DIRECTION
+────────────────────────────────────────────────────────────
+
+  LONG  :  Win Rate  38.1%  |  Expectancy: +0.3320R  |  Average PnL: $+931.08
+  SHORT :  Win Rate  31.7%  |  Expectancy: +0.1101R  |  Average PnL: $+309.20
+
+
+────────────────────────────────────────────────────────────
+  EXPECTANCY BY ENTRY HOUR RANGE
+────────────────────────────────────────────────────────────
+
+  14:00-15:00    132 trades  |  Expectancy: +0.3258R  |  Total PnL: $+143,784.73
+  15:00-16:00    157 trades  |  Expectancy: +0.3599R  |  Total PnL: $+129,452.43
+  16:00-17:00    138 trades  |  Expectancy: +0.3188R  |  Total PnL: $+144,226.49
+  17:00-18:00    119 trades  |  Expectancy: +0.0294R  |  Total PnL: $+1,298.91
+  18:00-19:00    150 trades  |  Expectancy: -0.0200R  |  Total PnL: $+27,187.97
+  19:00-20:00    140 trades  |  Expectancy: +0.2250R  |  Total PnL: $+56,497.17
+  20:00-21:00    112 trades  |  Expectancy: +0.3438R  |  Total PnL: $+97,882.84
