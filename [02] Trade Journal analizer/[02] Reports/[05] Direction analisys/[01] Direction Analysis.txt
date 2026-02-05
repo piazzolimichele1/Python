@@ -1,0 +1,35 @@
+================================================================================
+  DIRECTION ANALYSIS — LONG vs SHORT
+  Michele Piazzoli — Data Analysis
+================================================================================
+
+────────────────────────────────────────────────────────────
+  LONG
+────────────────────────────────────────────────────────────
+  Trades:                   494 (52.1% of total)
+  Wins:                     188
+  Losses:                   306
+  Win Rate:                 38.06%
+  Total Profit and Loss:    $+459,952.85
+  Average Profit and Loss:  $+931.08
+  Average Win:              $+6,853.42
+  Average Loss:             $-2,707.48
+  Profit Factor:            1.5552
+  Average R-Multiple:       0.3320R
+  Average Duration:         170.1 minutes
+
+────────────────────────────────────────────────────────────
+  SHORT
+────────────────────────────────────────────────────────────
+  Trades:                   454 (47.9% of total)
+  Wins:                     144
+  Losses:                   310
+  Win Rate:                 31.72%
+  Total Profit and Loss:    $+140,377.69
+  Average Profit and Loss:  $+309.20
+  Average Win:              $+6,778.56
+  Average Loss:             $-2,695.92
+  Profit Factor:            1.1680
+  Average R-Multiple:       0.1101R
+  Average Duration:         167.8 minutes
+
