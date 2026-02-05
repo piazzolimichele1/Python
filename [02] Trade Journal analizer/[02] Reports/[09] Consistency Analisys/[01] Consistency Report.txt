@@ -1,0 +1,98 @@
+================================================================================
+  CONSISTENCY AND STABILITY REPORT
+  Michele Piazzoli — Data Analysis
+================================================================================
+
+  This report measures how consistently the strategy produces
+  positive results across different time frames.
+
+────────────────────────────────────────────────────────────
+  MONTHLY CONSISTENCY
+────────────────────────────────────────────────────────────
+
+  Profitable Periods:       24 out of 25 (96.0%)
+    How many monthly periods closed in profit.
+
+  Loss Periods:             1 out of 25
+    How many monthly periods closed at breakeven or in loss.
+
+  Best Period:              $+66,500.00
+    The single best monthly result.
+
+  Worst Period:             $-21,355.86
+    The single worst monthly result.
+
+  Average PnL:              $+24,013.22
+    The average profit or loss per monthly period.
+
+  Median PnL:               $+21,000.00
+    The middle value. Not affected by extreme periods.
+
+  Standard Deviation:       $+19,905.98
+    How much monthly results vary. Lower means more
+    consistent. Higher means more volatile results.
+
+  Coefficient of Variation: 0.8290
+    Standard Deviation divided by the Mean. Lower values
+    indicate more stable, predictable returns.
+
+────────────────────────────────────────────────────────────
+  WEEKLY CONSISTENCY
+────────────────────────────────────────────────────────────
+
+  Profitable Periods:       51 out of 71 (71.8%)
+    How many weekly periods closed in profit.
+
+  Loss Periods:             20 out of 71
+    How many weekly periods closed at breakeven or in loss.
+
+  Best Period:              $+49,000.00
+    The single best weekly result.
+
+  Worst Period:             $-24,500.00
+    The single worst weekly result.
+
+  Average PnL:              $+8,455.36
+    The average profit or loss per weekly period.
+
+  Median PnL:               $+7,000.00
+    The middle value. Not affected by extreme periods.
+
+  Standard Deviation:       $+15,486.41
+    How much weekly results vary. Lower means more
+    consistent. Higher means more volatile results.
+
+  Coefficient of Variation: 1.8315
+    Standard Deviation divided by the Mean. Lower values
+    indicate more stable, predictable returns.
+
+────────────────────────────────────────────────────────────
+  DAILY CONSISTENCY
+────────────────────────────────────────────────────────────
+
+  Profitable Periods:       184 out of 288 (63.9%)
+    How many daily periods closed in profit.
+
+  Loss Periods:             104 out of 288
+    How many daily periods closed at breakeven or in loss.
+
+  Best Period:              $+35,000.00
+    The single best daily result.
+
+  Worst Period:             $-17,500.00
+    The single worst daily result.
+
+  Average PnL:              $+2,084.48
+    The average profit or loss per daily period.
+
+  Median PnL:               $+1,750.00
+    The middle value. Not affected by extreme periods.
+
+  Standard Deviation:       $+8,216.90
+    How much daily results vary. Lower means more
+    consistent. Higher means more volatile results.
+
+  Coefficient of Variation: 3.9419
+    Standard Deviation divided by the Mean. Lower values
+    indicate more stable, predictable returns.
+
