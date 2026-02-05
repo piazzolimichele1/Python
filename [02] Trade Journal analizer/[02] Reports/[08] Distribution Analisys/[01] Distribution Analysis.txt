@@ -1,0 +1,98 @@
+================================================================================
+  PROFIT AND LOSS DISTRIBUTION ANALYSIS
+  Michele Piazzoli — Data Analysis
+================================================================================
+
+  This report shows how trade results are distributed,
+  helping you understand the shape and spread of your returns.
+
+────────────────────────────────────────────────────────────
+  DOLLAR PROFIT AND LOSS DISTRIBUTION
+────────────────────────────────────────────────────────────
+
+  Mean (average):           633.26 $
+    The average result across all trades.
+
+  Median (middle value):    -1413.36 $
+    The middle trade when sorted. Not affected by extremes.
+
+  Standard Deviation:       4956.89 $
+    How much results vary from trade to trade. Higher means
+    more volatile results.
+
+  Skewness:                 0.8087
+    Positive skew means more large winners than large losers.
+    Negative skew means the opposite. Zero means symmetric.
+
+  Kurtosis:                 -1.0450
+    Measures how heavy the tails are. High kurtosis means
+    more extreme results (both big wins and big losses)
+    than a normal distribution would predict.
+
+  Minimum:                  -3500.00 $
+  Maximum:                  8750.00 $
+
+  Percentiles:
+     1th percentile:  -3500.00 $
+     5th percentile:  -3500.00 $
+    10th percentile:  -3500.00 $
+    25th percentile:  -3500.00 $
+    50th percentile:  -1413.36 $
+    75th percentile:  4419.28 $
+    90th percentile:  8750.00 $
+    95th percentile:  8750.00 $
+    99th percentile:  8750.00 $
+
+────────────────────────────────────────────────────────────
+  R-MULTIPLE DISTRIBUTION
+────────────────────────────────────────────────────────────
+
+  Mean (average):           0.23 R
+    The average result across all trades.
+
+  Median (middle value):    -1.00 R
+    The middle trade when sorted. Not affected by extremes.
+
+  Standard Deviation:       1.67 R
+    How much results vary from trade to trade. Higher means
+    more volatile results.
+
+  Skewness:                 0.6290
+    Positive skew means more large winners than large losers.
+    Negative skew means the opposite. Zero means symmetric.
+
+  Kurtosis:                 -1.6078
+    Measures how heavy the tails are. High kurtosis means
+    more extreme results (both big wins and big losses)
+    than a normal distribution would predict.
+
+  Minimum:                  -1.00 R
+  Maximum:                  2.50 R
+
+  Percentiles:
+     1th percentile:  -1.00 R
+     5th percentile:  -1.00 R
+    10th percentile:  -1.00 R
+    25th percentile:  -1.00 R
+    50th percentile:  -1.00 R
+    75th percentile:  2.50 R
+    90th percentile:  2.50 R
+    95th percentile:  2.50 R
+    99th percentile:  2.50 R
+
+────────────────────────────────────────────────────────────
+  R-MULTIPLE DISTRIBUTION TABLE
+────────────────────────────────────────────────────────────
+  Shows how many trades fall into each R-multiple range:
+
+  [-10.0R to  -1.0R)     0 trades  (  0.0%)  
+  [ -1.0R to  -0.5R)   616 trades  ( 65.0%)  ████████████████████████████████
+  [ -0.5R to   0.0R)     0 trades  (  0.0%)  
+  [  0.0R to   0.5R)     0 trades  (  0.0%)  
+  [  0.5R to   1.0R)     0 trades  (  0.0%)  
+  [  1.0R to   1.5R)     0 trades  (  0.0%)  
+  [  1.5R to   2.0R)     0 trades  (  0.0%)  
+  [  2.0R to   2.5R)    45 trades  (  4.7%)  ██
+  [  2.5R to   3.0R)   287 trades  ( 30.3%)  ███████████████
+  [  3.0R to   5.0R)     0 trades  (  0.0%)  
+  [  5.0R to  10.0R)     0 trades  (  0.0%)  
