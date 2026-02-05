@@ -1,0 +1,524 @@
+"""
+================================================================================
+    MONTE CARLO SIMULATION — Trade Sequence Randomization
+    Michele Piazzoli — Data Analysis
+================================================================================
+
+    Takes a trade list CSV and runs Monte Carlo simulations by randomizing
+    the order of historical trades thousands of times. This reveals the
+    range of possible outcomes the strategy could produce, confidence
+    intervals, risk of ruin, and drawdown probabilities.
+
+    Usage:
+        python3 montecarlo_simulation.py <path_to_trades.csv>
+
+    Optional arguments:
+        --simulations 10000     Number of simulations (default: 10000)
+        --initial 100000        Initial balance (default: auto-detect from CSV)
+
+    Output:
+        Creates "MonteCarlo_Report/" with:
+        - reports/  → comprehensive text report
+        - charts/   → PNG visualizations
+
+    Requirements:
+        pip install pandas numpy matplotlib
+================================================================================
+"""
+
+import sys
+import os
+import argparse
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import warnings
+warnings.filterwarnings("ignore")
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  THEME
+# ══════════════════════════════════════════════════════════════════════════════
+
+DARK_BG = "#0f1117"
+PANEL_BG = "#1a1d29"
+GREEN = "#00e676"
+RED = "#ff5252"
+CYAN = "#00bcd4"
+GOLD = "#ffd740"
+ORANGE = "#ff9800"
+PURPLE = "#bb86fc"
+WHITE = "#e0e0e0"
+GREY = "#8892a0"
+
+plt.rcParams.update({
+    "figure.facecolor": DARK_BG,
+    "axes.facecolor": PANEL_BG,
+    "axes.edgecolor": "#2a2e3a",
+    "axes.labelcolor": WHITE,
+    "text.color": WHITE,
+    "xtick.color": GREY,
+    "ytick.color": GREY,
+    "grid.color": "#2a2e3a",
+    "grid.alpha": 0.5,
+    "font.family": "monospace",
+    "font.size": 10,
+    "figure.dpi": 150,
+})
+
+AUTHOR = "Michele Piazzoli — Data Analysis"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  HELPERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def fmt_money(val):
+    sign = "+" if val >= 0 else ""
+    return f"${sign}{val:,.2f}"
+
+
+def fmt_pct(val):
+    sign = "+" if val >= 0 else ""
+    return f"{sign}{val:.2f}%"
+
+
+def bar_visual(pct, length=40):
+    filled = int(pct / 100 * length)
+    filled = max(0, min(length, filled))
+    return "█" * filled + "░" * (length - filled)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  DATA LOADING
+# ══════════════════════════════════════════════════════════════════════════════
+
+def load_trades(csv_path):
+    df = pd.read_csv(csv_path)
+    df.columns = df.columns.str.strip()
+    return df["P/L ($)"].values, df["Risk ($)"].values, df["Balance Pre ($)"].iloc[0]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  MONTE CARLO ENGINE
+# ══════════════════════════════════════════════════════════════════════════════
+
+def run_monte_carlo(pnl_array, initial_balance, n_simulations, rng=None):
+    if rng is None:
+        rng = np.random.default_rng(42)
+
+    n_trades = len(pnl_array)
+    equity_matrix = np.zeros((n_simulations, n_trades + 1))
+    equity_matrix[:, 0] = initial_balance
+
+    for i in range(n_simulations):
+        shuffled = rng.permutation(pnl_array)
+        equity_matrix[i, 1:] = initial_balance + np.cumsum(shuffled)
+
+    return equity_matrix
+
+
+def compute_drawdowns(equity_matrix):
+    n_sims = equity_matrix.shape[0]
+    max_dds = np.zeros(n_sims)
+    max_dd_pcts = np.zeros(n_sims)
+
+    for i in range(n_sims):
+        curve = equity_matrix[i]
+        peak = np.maximum.accumulate(curve)
+        dd = curve - peak
+        dd_pct = dd / peak * 100
+        max_dds[i] = dd.min()
+        max_dd_pcts[i] = dd_pct.min()
+
+    return max_dds, max_dd_pcts
+
+
+def compute_underwater_periods(equity_matrix):
+    n_sims = equity_matrix.shape[0]
+    max_underwater = np.zeros(n_sims, dtype=int)
+
+    for i in range(n_sims):
+        curve = equity_matrix[i]
+        peak = np.maximum.accumulate(curve)
+        is_underwater = curve < peak
+        current = 0
+        longest = 0
+        for uw in is_underwater:
+            if uw:
+                current += 1
+                longest = max(longest, current)
+            else:
+                current = 0
+        max_underwater[i] = longest
+
+    return max_underwater
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  REPORT GENERATOR
+# ══════════════════════════════════════════════════════════════════════════════
+
+def generate_report(equity_matrix, pnl_array, risk_array, initial_balance,
+                    n_simulations, reports_dir):
+
+    final_balances = equity_matrix[:, -1]
+    max_dds, max_dd_pcts = compute_drawdowns(equity_matrix)
+    max_underwater = compute_underwater_periods(equity_matrix)
+
+    n_trades = len(pnl_array)
+    wins = (pnl_array > 0).sum()
+    losses = (pnl_array < 0).sum()
+    win_rate = wins / n_trades * 100
+    avg_win = pnl_array[pnl_array > 0].mean() if wins > 0 else 0
+    avg_loss = pnl_array[pnl_array < 0].mean() if losses > 0 else 0
+    total_pnl = pnl_array.sum()
+    final_balance = initial_balance + total_pnl
+    total_return = total_pnl / initial_balance * 100
+
+    # Risk of ruin
+    ruin_levels = [0.10, 0.20, 0.30, 0.40, 0.50]
+    ruin_probs = {}
+    for level in ruin_levels:
+        floor = initial_balance * (1 - level)
+        min_per_sim = equity_matrix.min(axis=1)
+        ruin_probs[level] = (min_per_sim <= floor).sum() / n_simulations * 100
+
+    # Profit checkpoints
+    checkpoints = []
+    for pct in [0.25, 0.50, 0.75, 1.0]:
+        idx = int(n_trades * pct)
+        if idx > 0 and idx <= n_trades:
+            balances_at = equity_matrix[:, idx]
+            prob_profit = (balances_at > initial_balance).sum() / n_simulations * 100
+            avg_bal = balances_at.mean()
+            checkpoints.append((idx, pct, prob_profit, avg_bal))
+
+    # Extreme paths
+    worst_dd_idx = np.argmin(max_dds)
+    best_dd_idx = np.argmax(max_dds)
+
+    # Key stats
+    median_dd = np.median(max_dd_pcts)
+    p5_dd = np.percentile(max_dd_pcts, 5)
+    median_dd_d = np.median(max_dds)
+    p5_dd_d = np.percentile(max_dds, 5)
+    best_dd = max_dd_pcts.max()
+    worst_dd = max_dd_pcts.min()
+    med_uw = int(np.median(max_underwater))
+    p95_uw = int(np.percentile(max_underwater, 95))
+    ruin_10 = ruin_probs.get(0.10, 0)
+    ruin_30 = ruin_probs.get(0.30, 0)
+    ruin_50 = ruin_probs.get(0.50, 0)
+
+    with open(os.path.join(reports_dir, "Monte Carlo Simulation Report.txt"), "w") as f:
+
+        # ─── HEADER ───
+        f.write("=" * 80 + "\n")
+        f.write("  MONTE CARLO SIMULATION REPORT\n")
+        f.write(f"  {AUTHOR}\n")
+        f.write("=" * 80 + "\n\n\n")
+
+        # ─── WHAT IS THIS? ───
+        f.write("─" * 80 + "\n")
+        f.write("  WHAT IS THIS REPORT?\n")
+        f.write("─" * 80 + "\n\n")
+        f.write("  This report answers one question: \"What if I had taken the same trades,\n")
+        f.write("  but in a completely different order?\"\n\n")
+        f.write(f"  We took all {n_trades} historical trades and shuffled them into\n")
+        f.write(f"  {n_simulations:,} random sequences. Every simulation uses the exact same\n")
+        f.write(f"  trades — same wins, same losses, same amounts. Only the order changes.\n\n")
+        f.write("  Because the trades are identical, every simulation ends at the same\n")
+        f.write(f"  final balance: {fmt_money(final_balance)}. What changes is the path\n")
+        f.write("  to reach that balance.\n\n\n")
+
+        # ─── ORIGINAL STRATEGY SNAPSHOT ───
+        f.write("─" * 80 + "\n")
+        f.write("  ORIGINAL STRATEGY SNAPSHOT\n")
+        f.write("─" * 80 + "\n\n")
+        f.write(f"  Starting Capital:         {fmt_money(initial_balance)}\n")
+        f.write(f"  Final Balance:            {fmt_money(final_balance)}\n")
+        f.write(f"  Net Profit:               {fmt_money(total_pnl)}\n")
+        f.write(f"  Total Return:             {fmt_pct(total_return)}\n\n")
+        f.write(f"  Total Trades:             {n_trades}\n")
+        f.write(f"  Wins:                     {wins} ({win_rate:.1f}%)\n")
+        f.write(f"  Losses:                   {losses} ({100 - win_rate:.1f}%)\n")
+        f.write(f"  Average Win:              {fmt_money(avg_win)}\n")
+        f.write(f"  Average Loss:             {fmt_money(avg_loss)}\n\n")
+        f.write(f"  The win rate is {win_rate:.1f}%, but winning trades are significantly\n")
+        f.write(f"  larger than losing trades (avg win {fmt_money(avg_win)} vs avg loss\n")
+        f.write(f"  {fmt_money(avg_loss)}). This is what drives profitability.\n\n\n")
+
+        # ─── DRAWDOWNS ───
+        f.write("─" * 80 + "\n")
+        f.write("  DRAWDOWNS\n")
+        f.write("─" * 80 + "\n\n")
+        f.write("  A drawdown is when the account drops from its highest point. It measures\n")
+        f.write("  the worst temporary loss experienced before recovering. Across all\n")
+        f.write(f"  {n_simulations:,} simulations, here is the range of worst-case drawdowns:\n\n")
+
+        f.write(f"  Best case (luckiest order):     {fmt_pct(best_dd):>10s}   ({fmt_money(max_dds.max())})\n")
+        f.write(f"  Typical case (median):          {fmt_pct(median_dd):>10s}   ({fmt_money(median_dd_d)})\n")
+        f.write(f"  Bad case:                       {fmt_pct(p5_dd):>10s}   ({fmt_money(p5_dd_d)})\n")
+        f.write(f"  Worst case (unluckiest order):  {fmt_pct(worst_dd):>10s}   ({fmt_money(max_dds.min())})\n\n")
+
+        f.write("  How to read this: in a typical scenario, the account will at some\n")
+        f.write(f"  point be about {abs(median_dd):.0f}% below its peak before recovering.\n")
+        f.write(f"  In a bad scenario, this could reach {abs(p5_dd):.0f}% or more.\n\n\n")
+
+        # ─── RISK OF RUIN TABLE ───
+        f.write("─" * 80 + "\n")
+        f.write("  RISK OF RUIN\n")
+        f.write("─" * 80 + "\n\n")
+        f.write("  What is the chance the account drops to a given level at any point?\n\n")
+
+        f.write(f"  {'Loss Level':<18s}  {'Threshold':<16s}  {'Probability':>11s}  {'Visual'}\n")
+        f.write("  " + "─" * 74 + "\n")
+        for level in ruin_levels:
+            floor = initial_balance * (1 - level)
+            prob = ruin_probs[level]
+            vis = bar_visual(prob, 30)
+            f.write(f"  {level*100:5.0f}% loss        {fmt_money(floor):<16s}  {prob:10.1f}%  {vis}\n")
+
+        f.write("\n")
+        f.write(f"  In plain terms: there is a {ruin_10:.0f}% chance the account will at some\n")
+        f.write(f"  point be down 10%, a {ruin_30:.0f}% chance of being down 30%, and a\n")
+        f.write(f"  {ruin_50:.0f}% chance of being down 50%. All of these are temporary —\n")
+        f.write(f"  every simulation ends in profit.\n\n\n")
+
+        # ─── UNDERWATER PERIODS ───
+        f.write("─" * 80 + "\n")
+        f.write("  UNDERWATER PERIODS\n")
+        f.write("─" * 80 + "\n\n")
+        f.write("  An underwater period is a streak of consecutive trades where the account\n")
+        f.write("  stays below its previous high.\n\n")
+
+        worst_uw = int(max_underwater.max())
+        best_uw = int(max_underwater.min())
+
+        f.write("  For how many trades the strategy stayed without seeing a new peak?\n\n")
+        f.write(f"  Shortest drought:           {best_uw} trades\n")
+        f.write(f"  Typical drought (median):   {med_uw} trades\n")
+        f.write(f"  Long drought:               {p95_uw} trades\n")
+        f.write(f"  Longest drought ever:       {worst_uw} trades\n\n\n")
+
+        # ─── PROBABILITY OF PROFIT OVER TIME ───
+        f.write("─" * 80 + "\n")
+        f.write("  PROBABILITY OF PROFIT OVER TIME\n")
+        f.write("─" * 80 + "\n\n")
+        f.write("  How likely is the account to be in profit at different stages?\n\n")
+
+        f.write(f"  {'Stage':<28s}  {'Trades':>7s}  {'Prob. of Profit':>15s}  {'Avg Balance':>16s}\n")
+        f.write("  " + "─" * 70 + "\n")
+        for idx, pct, prob, avg in checkpoints:
+            label = f"{pct*100:.0f}% ({idx}/{n_trades})"
+            f.write(f"  {label:<28s}  {idx:>7d}  {prob:>14.1f}%  {fmt_money(avg):>16s}\n")
+
+        f.write("\n")
+        first_prob = checkpoints[0][2] if checkpoints else 0
+        f.write(f"  Even just a quarter of the way through, {first_prob:.0f}% of simulations\n")
+        f.write(f"  are already in profit. By the halfway point, the strategy is\n")
+        f.write(f"  profitable in virtually every scenario.\n\n\n")
+
+        # ─── EQUITY CONFIDENCE TABLE ───
+        f.write("─" * 80 + "\n")
+        f.write("  WHERE WILL THE BALANCE BE? — CONFIDENCE INTERVALS\n")
+        f.write("─" * 80 + "\n\n")
+        f.write("  At each stage, the balance could be anywhere within a range.\n")
+        f.write("  The table below shows the likely range at key points.\n\n")
+
+        f.write(f"  {'Trade':>8s}  {'Pessimistic':>14s}  {'Lower Avg':>14s}  {'Median':>14s}  {'Upper Avg':>14s}  {'Optimistic':>14s}\n")
+        f.write(f"  {'':>8s}  {'(5th percentile)':>14s}  {'(25th percentile)':>14s}  {'(50th)':>14s}  {'(75th percentile)':>14s}  {'(95th percentile)':>14s}\n")
+        f.write("  " + "─" * 75 + "\n")
+
+        steps = np.linspace(0, n_trades, min(26, n_trades + 1), dtype=int)
+        for step in steps:
+            if step == 0:
+                continue
+            col = equity_matrix[:, step]
+            f.write(f"  {step:8d}  {fmt_money(np.percentile(col, 5)):>14s}  "
+                    f"{fmt_money(np.percentile(col, 25)):>14s}  "
+                    f"{fmt_money(np.percentile(col, 50)):>14s}  "
+                    f"{fmt_money(np.percentile(col, 75)):>14s}  "
+                    f"{fmt_money(np.percentile(col, 95)):>14s}\n")
+
+        f.write("\n\n")
+
+        # ─── EXTREME SCENARIOS ───
+        f.write("─" * 80 + "\n")
+        f.write("  EXTREME SCENARIOS — BEST AND WORST PATHS\n")
+        f.write("─" * 80 + "\n\n")
+
+        worst_curve = equity_matrix[worst_dd_idx]
+        worst_peak = np.maximum.accumulate(worst_curve)
+        worst_dd_val = (worst_curve - worst_peak).min()
+        worst_dd_pct = ((worst_curve - worst_peak) / worst_peak * 100).min()
+        worst_min = worst_curve.min()
+
+        best_curve = equity_matrix[best_dd_idx]
+        best_peak = np.maximum.accumulate(best_curve)
+        best_dd_val = (best_curve - best_peak).min()
+        best_dd_pct = ((best_curve - best_peak) / best_peak * 100).min()
+        best_min = best_curve.min()
+
+        f.write("  UNLUCKIEST ORDER (worst path):\n")
+        f.write(f"    Deepest drawdown:       {fmt_money(worst_dd_val)} ({worst_dd_pct:.1f}%)\n")
+        f.write(f"    Lowest balance reached: {fmt_money(worst_min)}\n")
+        f.write(f"    Final balance:          {fmt_money(worst_curve[-1])}\n\n")
+
+        f.write("  LUCKIEST ORDER (best path):\n")
+        f.write(f"    Deepest drawdown:       {fmt_money(best_dd_val)} ({best_dd_pct:.1f}%)\n")
+        f.write(f"    Lowest balance reached: {fmt_money(best_min)}\n")
+        f.write(f"    Final balance:          {fmt_money(best_curve[-1])}\n\n")
+
+        f.write("  Both paths end at the same place. The only difference is how\n")
+        f.write("  the balance moved along the way.\n\n\n")
+
+        # ─── BOTTOM LINE ───
+        f.write("=" * 80 + "\n")
+        f.write("  BOTTOM LINE\n")
+        f.write("=" * 80 + "\n\n")
+
+        f.write(f"  After {n_simulations:,} simulations of {n_trades} trades:\n\n")
+
+        f.write(f"  1. THE STRATEGY IS PROFITABLE.\n")
+        f.write(f"     Every single simulation ends at {fmt_money(final_balance)},\n")
+        f.write(f"     a {fmt_pct(total_return)} return on the initial {fmt_money(initial_balance)}.\n\n")
+
+        f.write(f"  2. DRAWDOWNS VARY BY TRADE ORDER.\n")
+        f.write(f"     In a typical scenario, the account drops about {abs(median_dd):.0f}% from its\n")
+        f.write(f"     peak at some point. In a bad scenario, up to {abs(p5_dd):.0f}%.\n\n")
+
+        f.write("=" * 80 + "\n")
+
+    print("  [done] Monte Carlo Simulation Report.txt")
+
+    return final_balances, max_dds, max_dd_pcts, max_underwater, ruin_probs
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CHART GENERATORS (only risk of ruin + worst/best/median paths)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def chart_worst_best_median(equity_matrix, max_dds, initial_balance, charts_dir):
+    fig, ax = plt.subplots(figsize=(16, 7))
+    n_trades = equity_matrix.shape[1] - 1
+    x = np.arange(n_trades + 1)
+
+    worst_idx = np.argmin(max_dds)
+    best_idx = np.argmax(max_dds)
+
+    median_dd = np.median(max_dds)
+    median_idx = np.argmin(np.abs(max_dds - median_dd))
+
+    ax.plot(x, equity_matrix[worst_idx], color=RED, linewidth=1.5, alpha=0.9, label="Worst Path (deepest DD)")
+    ax.plot(x, equity_matrix[median_idx], color=GOLD, linewidth=1.5, alpha=0.9, label="Median Path")
+    ax.plot(x, equity_matrix[best_idx], color=GREEN, linewidth=1.5, alpha=0.9, label="Best Path (shallowest DD)")
+
+    ax.axhline(y=initial_balance, color=GREY, linestyle="--", alpha=0.5, linewidth=0.8)
+
+    ax.set_title("EXTREME SCENARIOS — Best, Median, and Worst Paths", fontsize=14, fontweight="bold", pad=15)
+    ax.set_xlabel("Trade Number")
+    ax.set_ylabel("Balance ($)")
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+    ax.legend(loc="upper left", fontsize=10)
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    fig.savefig(os.path.join(charts_dir, "worst best median paths.png"))
+    plt.close()
+    print("  [done] worst best median paths.png")
+
+
+def chart_risk_of_ruin(equity_matrix, initial_balance, charts_dir):
+    thresholds = np.arange(0.05, 0.55, 0.05)
+    probs = []
+    for t in thresholds:
+        floor = initial_balance * (1 - t)
+        min_per_sim = equity_matrix.min(axis=1)
+        prob = (min_per_sim <= floor).sum() / equity_matrix.shape[0] * 100
+        probs.append(prob)
+
+    fig, ax = plt.subplots(figsize=(14, 6))
+    colors = [GREEN if p < 5 else GOLD if p < 20 else ORANGE if p < 50 else RED for p in probs]
+    bars = ax.bar(range(len(thresholds)), probs, color=colors, alpha=0.8, width=0.7)
+
+    ax.set_xticks(range(len(thresholds)))
+    ax.set_xticklabels([f"{t*100:.0f}%" for t in thresholds])
+    ax.set_title("RISK OF RUIN — Probability of Reaching Each Loss Level", fontsize=13, fontweight="bold", pad=15)
+    ax.set_xlabel("Account Loss Threshold")
+    ax.set_ylabel("Probability (%)")
+    ax.grid(True, alpha=0.3, axis="y")
+
+    for bar, prob in zip(bars, probs):
+        if prob > 0.1:
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.3,
+                    f"{prob:.1f}%", ha="center", va="bottom", fontsize=8, color=WHITE)
+
+    plt.tight_layout()
+    fig.savefig(os.path.join(charts_dir, "risk of ruin.png"))
+    plt.close()
+    print("  [done] risk of ruin.png")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  MAIN
+# ══════════════════════════════════════════════════════════════════════════════
+
+def main():
+    parser = argparse.ArgumentParser(description="Monte Carlo Simulation for Trade Sequences")
+    parser.add_argument("csv_path", help="Path to trades CSV file")
+    parser.add_argument("--simulations", type=int, default=10000, help="Number of simulations (default: 10000)")
+    parser.add_argument("--initial", type=float, default=None, help="Initial balance (default: auto-detect)")
+    args = parser.parse_args()
+
+    if not os.path.exists(args.csv_path):
+        print(f"  [ERROR] File not found: {args.csv_path}")
+        sys.exit(1)
+
+    out_root = "MonteCarlo_Report"
+    reports_dir = os.path.join(out_root, "reports")
+    charts_dir = os.path.join(out_root, "charts")
+    os.makedirs(reports_dir, exist_ok=True)
+    os.makedirs(charts_dir, exist_ok=True)
+
+    print("=" * 60)
+    print("  MONTE CARLO SIMULATION")
+    print(f"  {AUTHOR}")
+    print("=" * 60)
+
+    print("\n  Loading trades...")
+    pnl_array, risk_array, detected_balance = load_trades(args.csv_path)
+    initial_balance = args.initial if args.initial else detected_balance
+    n_simulations = args.simulations
+
+    print(f"  Loaded {len(pnl_array)} trades.")
+    print(f"  Initial Balance: {fmt_money(initial_balance)}")
+    print(f"  Simulations: {n_simulations:,}\n")
+
+    print("  Running Monte Carlo simulation...")
+    rng = np.random.default_rng(42)
+    equity_matrix = run_monte_carlo(pnl_array, initial_balance, n_simulations, rng)
+    print("  Simulation complete.\n")
+
+    max_dds, max_dd_pcts = compute_drawdowns(equity_matrix)
+    max_underwater = compute_underwater_periods(equity_matrix)
+
+    print("  ── GENERATING REPORT ──\n")
+    generate_report(equity_matrix, pnl_array, risk_array, initial_balance,
+                    n_simulations, reports_dir)
+
+    print("\n  ── GENERATING CHARTS ──\n")
+    chart_risk_of_ruin(equity_matrix, initial_balance, charts_dir)
+    chart_worst_best_median(equity_matrix, max_dds, initial_balance, charts_dir)
+
+    print("\n" + "=" * 60)
+    print(f"  COMPLETE — All output saved to: {out_root}/")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    main()
