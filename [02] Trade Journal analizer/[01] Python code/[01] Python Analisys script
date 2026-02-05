@@ -1,0 +1,1412 @@
+"""
+================================================================================
+    TRADE JOURNAL ANALYZER — Deep Performance Analytics
+    Michele Piazzoli — Data Analysis
+================================================================================
+
+    Reads a trade list CSV and generates comprehensive performance reports
+    covering every possible metric and insight.
+
+    Usage:
+        python3 trade_journal_analyzer.py <path_to_trades.csv>
+
+    Output:
+        Creates a folder "TradeJournal_Report/" with organized subfolders:
+        - reports/   → text and CSV reports
+        - charts/    → PNG visualizations
+
+    Requirements:
+        pip install pandas numpy matplotlib
+================================================================================
+"""
+
+import sys
+import os
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+from pathlib import Path
+import warnings
+warnings.filterwarnings("ignore")
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import matplotlib.ticker as mticker
+from matplotlib.colors import LinearSegmentedColormap
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  THEME
+# ══════════════════════════════════════════════════════════════════════════════
+
+DARK_BG = "#0f1117"
+PANEL_BG = "#1a1d29"
+GREEN = "#00e676"
+RED = "#ff5252"
+CYAN = "#00bcd4"
+GOLD = "#ffd740"
+WHITE = "#e0e0e0"
+GREY = "#8892a0"
+
+plt.rcParams.update({
+    "figure.facecolor": DARK_BG,
+    "axes.facecolor": PANEL_BG,
+    "axes.edgecolor": "#2a2e3a",
+    "axes.labelcolor": WHITE,
+    "text.color": WHITE,
+    "xtick.color": GREY,
+    "ytick.color": GREY,
+    "grid.color": "#2a2e3a",
+    "grid.alpha": 0.5,
+    "font.family": "monospace",
+    "font.size": 10,
+    "figure.dpi": 150,
+})
+
+AUTHOR = "Michele Piazzoli — Data Analysis"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  DATA LOADING
+# ══════════════════════════════════════════════════════════════════════════════
+
+def load_trades(csv_path: str) -> pd.DataFrame:
+    df = pd.read_csv(csv_path, parse_dates=["Entry Time", "Exit Time"])
+    df.columns = df.columns.str.strip()
+
+    df["PnL"] = df["P/L ($)"]
+    df["Risk"] = df["Risk ($)"]
+    df["Win"] = df["Result"] == "TP"
+    df["Loss"] = df["Result"] == "SL"
+    df["R Multiple"] = df["PnL"] / df["Risk"].replace(0, np.nan)
+    df["Duration"] = (df["Exit Time"] - df["Entry Time"]).dt.total_seconds() / 60
+    df["Entry Hour"] = df["Entry Time"].dt.hour
+    df["Entry Weekday"] = df["Entry Time"].dt.day_name()
+    df["Entry Date"] = df["Entry Time"].dt.date
+    df["Month"] = df["Entry Time"].dt.to_period("M")
+    df["Week"] = df["Entry Time"].dt.to_period("W")
+    df["Cumulative PnL"] = df["PnL"].cumsum()
+    df["Cumulative Return"] = (df["Cumulative PnL"] / df["Balance Pre ($)"].iloc[0]) * 100
+    df["Trade Number"] = range(1, len(df) + 1)
+
+    df["Running Peak"] = df["Balance Post ($)"].cummax()
+    df["Drawdown"] = df["Balance Post ($)"] - df["Running Peak"]
+    df["Drawdown Percent"] = (df["Drawdown"] / df["Running Peak"]) * 100
+
+    return df
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  HELPERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def write_header(f, title):
+    f.write("=" * 80 + "\n")
+    f.write(f"  {title}\n")
+    f.write(f"  {AUTHOR}\n")
+    f.write("=" * 80 + "\n\n")
+
+
+def fmt_money(val):
+    sign = "+" if val >= 0 else ""
+    return f"${sign}{val:,.2f}"
+
+
+def fmt_pct(val):
+    sign = "+" if val >= 0 else ""
+    return f"{sign}{val:.2f}%"
+
+
+def hour_range(h):
+    return f"{h:02d}:00-{h+1:02d}:00"
+
+
+def detect_strategy_settings(df):
+    init_bal = df["Balance Pre ($)"].iloc[0]
+    r_wins = df.loc[df["Win"], "R Multiple"].dropna()
+    avg_rr = r_wins.mean() if len(r_wins) > 0 else 0
+    hours = sorted(df["Entry Hour"].unique())
+    session_start = f"{hours[0]:02d}:00" if hours else "N/A"
+    session_end = f"{hours[-1]+1:02d}:00" if hours else "N/A"
+    directions = df["Direction"].unique().tolist()
+    total_months = df["Month"].nunique()
+    date_start = df["Entry Time"].min().strftime("%Y-%m-%d")
+    date_end = df["Entry Time"].max().strftime("%Y-%m-%d")
+    return {
+        "Initial Balance": fmt_money(init_bal),
+        "Backtest Period": f"{date_start} to {date_end}",
+        "Total Months": total_months,
+        "Session Window": f"{session_start} - {session_end}",
+        "Directions Traded": ", ".join(directions),
+        "Average Reward to Risk": f"1:{avg_rr:.2f}",
+        "Active Trading Hours": ", ".join([hour_range(h) for h in hours]),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  01: OVERALL SUMMARY
+# ══════════════════════════════════════════════════════════════════════════════
+
+def report_overall_summary(df, out_dir):
+    init_bal = df["Balance Pre ($)"].iloc[0]
+    final_bal = df["Balance Post ($)"].iloc[-1]
+    total_pnl = df["PnL"].sum()
+    total_return = (final_bal - init_bal) / init_bal * 100
+
+    wins = df["Win"].sum()
+    losses = df["Loss"].sum()
+    total = len(df)
+    wr = wins / total * 100
+
+    gross_profit = df.loc[df["Win"], "PnL"].sum()
+    gross_loss = abs(df.loc[df["Loss"], "PnL"].sum())
+    pf = gross_profit / gross_loss if gross_loss > 0 else float("inf")
+
+    avg_win = df.loc[df["Win"], "PnL"].mean() if wins > 0 else 0
+    avg_loss = df.loc[df["Loss"], "PnL"].mean() if losses > 0 else 0
+    median_win = df.loc[df["Win"], "PnL"].median() if wins > 0 else 0
+    median_loss = df.loc[df["Loss"], "PnL"].median() if losses > 0 else 0
+
+    max_dd = df["Drawdown"].min()
+    max_dd_pct = df["Drawdown Percent"].min()
+
+    avg_r = df["R Multiple"].mean()
+    median_r = df["R Multiple"].median()
+    avg_r_win = df.loc[df["Win"], "R Multiple"].mean() if wins > 0 else 0
+    avg_r_loss = df.loc[df["Loss"], "R Multiple"].mean() if losses > 0 else 0
+
+    expectancy = (wr / 100) * avg_win + (1 - wr / 100) * avg_loss
+    expectancy_r = (wr / 100) * avg_r_win + (1 - wr / 100) * avg_r_loss
+
+    payoff = abs(avg_win / avg_loss) if avg_loss != 0 else float("inf")
+    kelly = (wr / 100) - ((1 - wr / 100) / payoff) if payoff > 0 else 0
+
+    trade_returns = df["PnL"] / df["Risk"]
+    sharpe_like = trade_returns.mean() / trade_returns.std() if trade_returns.std() > 0 else 0
+    downside = trade_returns[trade_returns < 0]
+    sortino_like = trade_returns.mean() / downside.std() if len(downside) > 0 and downside.std() > 0 else 0
+    calmar = total_return / abs(max_dd_pct) if max_dd_pct != 0 else 0
+
+    avg_dur = df["Duration"].mean()
+    avg_dur_win = df.loc[df["Win"], "Duration"].mean() if wins > 0 else 0
+    avg_dur_loss = df.loc[df["Loss"], "Duration"].mean() if losses > 0 else 0
+
+    best_trade = df.loc[df["PnL"].idxmax()]
+    worst_trade = df.loc[df["PnL"].idxmin()]
+
+    trading_days = df["Entry Date"].nunique()
+    avg_trades_day = total / trading_days
+
+    monthly_pnl = df.groupby("Month")["PnL"].sum()
+    months_positive = (monthly_pnl > 0).sum()
+    months_total = len(monthly_pnl)
+    consistency = months_positive / months_total * 100
+
+    settings = detect_strategy_settings(df)
+
+    with open(os.path.join(out_dir, "01 Overall Summary.txt"), "w") as f:
+        write_header(f, "OVERALL PERFORMANCE SUMMARY")
+
+        f.write("─" * 60 + "\n")
+        f.write("  STRATEGY SETTINGS (auto-detected from trade data)\n")
+        f.write("─" * 60 + "\n")
+        for k, v in settings.items():
+            f.write(f"  {k + ':':<28s} {v}\n")
+        f.write("\n")
+        f.write("  Note: The Average Reward to Risk ratio represents the\n")
+        f.write("  average R-multiple of winning trades. For example, 1:2.50\n")
+        f.write("  means that on average each win returns 2.50x the amount\n")
+        f.write("  risked on that trade.\n\n")
+
+        f.write("─" * 60 + "\n")
+        f.write("  CAPITAL\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  Initial Balance:          {fmt_money(init_bal)}\n")
+        f.write(f"  Final Balance:            {fmt_money(final_bal)}\n")
+        f.write(f"  Total Profit and Loss:    {fmt_money(total_pnl)}\n")
+        f.write(f"  Total Return:             {fmt_pct(total_return)}\n\n")
+        f.write(f"  Gross Profit:             {fmt_money(gross_profit)}\n")
+        f.write(f"    (Sum of all winning trades only)\n")
+        f.write(f"  Gross Loss:               {fmt_money(-gross_loss)}\n")
+        f.write(f"    (Sum of all losing trades only)\n\n")
+
+        f.write("─" * 60 + "\n")
+        f.write("  TRADE STATISTICS\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  Total Trades:             {total}\n")
+        f.write(f"  Wins:                     {wins}\n")
+        f.write(f"  Losses:                   {losses}\n")
+        f.write(f"  Win Rate:                 {wr:.2f}%\n")
+        f.write(f"  Profit Factor:            {pf:.4f}\n\n")
+
+        f.write(f"  Payoff Ratio:             {payoff:.4f}\n")
+        f.write(f"    The Payoff Ratio measures how much you win on average\n")
+        f.write(f"    compared to how much you lose on average. A value of\n")
+        f.write(f"    {payoff:.2f} means that each winning trade earns {payoff:.2f}x\n")
+        f.write(f"    the size of each losing trade. A Payoff Ratio above 1.0\n")
+        f.write(f"    means wins are larger than losses on average.\n\n")
+
+        f.write(f"  Average Win:              {fmt_money(avg_win)}\n")
+        f.write(f"  Average Loss:             {fmt_money(avg_loss)}\n\n")
+
+        f.write(f"  Median Win:               {fmt_money(median_win)}\n")
+        f.write(f"  Median Loss:              {fmt_money(median_loss)}\n")
+        f.write(f"    The Median is the middle value when all trades are sorted\n")
+        f.write(f"    by size. Unlike the Average, the Median is not affected\n")
+        f.write(f"    by extreme outliers. If the Median Win is higher than the\n")
+        f.write(f"    Average Win, it means a few small wins are pulling the\n")
+        f.write(f"    average down. If lower, a few large wins inflate the average.\n\n")
+
+        f.write(f"  Largest Win:              {fmt_money(best_trade['PnL'])}\n")
+        f.write(f"  Largest Loss:             {fmt_money(worst_trade['PnL'])}\n\n")
+
+        f.write("─" * 60 + "\n")
+        f.write("  R-MULTIPLE ANALYSIS\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  Average R-Multiple:       {avg_r:.4f}R\n")
+        f.write(f"  Median R-Multiple:        {median_r:.4f}R\n")
+        f.write(f"  Average Win (R):          {avg_r_win:.4f}R\n")
+        f.write(f"  Average Loss (R):         {avg_r_loss:.4f}R\n")
+        f.write(f"  Expectancy per trade ($): {fmt_money(expectancy)}\n")
+        f.write(f"  Expectancy per trade (R): {expectancy_r:.4f}R\n")
+        f.write(f"  Kelly Criterion:          {kelly:.4f} ({kelly*100:.2f}%)\n\n")
+
+        f.write("─" * 60 + "\n")
+        f.write("  RISK-ADJUSTED METRICS\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  Sharpe Ratio:             {sharpe_like:.4f}\n\n")
+
+        f.write(f"  Sortino Ratio:            {sortino_like:.4f}\n")
+        f.write(f"    The Sortino Ratio is similar to the Sharpe Ratio but only\n")
+        f.write(f"    penalizes downside volatility (losses). A value of 0.00\n")
+        f.write(f"    can occur when all losing trades have the same R-multiple\n")
+        f.write(f"    (e.g. all hit SL at exactly -1R), resulting in zero\n")
+        f.write(f"    downside deviation. This is actually a sign of disciplined\n")
+        f.write(f"    risk management with fixed stop-losses.\n\n")
+
+        f.write(f"  Calmar Ratio:             {calmar:.4f}\n")
+        f.write(f"    The Calmar Ratio divides total return by maximum drawdown.\n")
+        f.write(f"    It tells you how much return you earned per unit of worst-\n")
+        f.write(f"    case pain. A value of {calmar:.2f} means you earned\n")
+        f.write(f"    {calmar:.1f}% return for every 1% of max drawdown.\n")
+        f.write(f"    Higher is better. Above 3.0 is considered excellent.\n\n")
+
+        f.write(f"  Maximum Drawdown ($):     {fmt_money(max_dd)}\n")
+        f.write(f"  Maximum Drawdown (%):     {max_dd_pct:.2f}%\n\n")
+
+        f.write("─" * 60 + "\n")
+        f.write("  DURATION AND ACTIVITY\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  Average Trade Duration:   {avg_dur:.1f} minutes\n")
+        f.write(f"  Average Win Duration:     {avg_dur_win:.1f} minutes\n")
+        f.write(f"  Average Loss Duration:    {avg_dur_loss:.1f} minutes\n")
+        f.write(f"  Trading Days:             {trading_days}\n")
+        f.write(f"  Average Trades per Day:   {avg_trades_day:.2f}\n\n")
+
+        f.write("─" * 60 + "\n")
+        f.write("  CONSISTENCY\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  Months in Profit:         {months_positive}/{months_total}\n")
+        f.write(f"  Consistency Score:        {consistency:.1f}%\n")
+        f.write(f"  Best Month:               {monthly_pnl.idxmax()} with {fmt_money(monthly_pnl.max())}\n")
+        f.write(f"  Worst Month:              {monthly_pnl.idxmin()} with {fmt_money(monthly_pnl.min())}\n")
+
+    print("  [done] 01 Overall Summary.txt")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  02: MONTHLY BREAKDOWN
+# ══════════════════════════════════════════════════════════════════════════════
+
+def report_monthly_breakdown(df, out_dir):
+    grouped = df.groupby("Month").agg(
+        Trades=("PnL", "count"),
+        Wins=("Win", "sum"),
+        Losses=("Loss", "sum"),
+        WinRate=("Win", "mean"),
+        GrossProfit=("PnL", lambda x: x[x > 0].sum()),
+        GrossLoss=("PnL", lambda x: x[x < 0].sum()),
+        TotalPnL=("PnL", "sum"),
+        AveragePnL=("PnL", "mean"),
+        MedianPnL=("PnL", "median"),
+        StdPnL=("PnL", "std"),
+        MaxWin=("PnL", "max"),
+        MaxLoss=("PnL", "min"),
+        AvgR=("R Multiple", "mean"),
+        AvgRisk=("Risk", "mean"),
+        AvgDur=("Duration", "mean"),
+        StartBalance=("Balance Pre ($)", "first"),
+        EndBalance=("Balance Post ($)", "last"),
+    ).reset_index()
+    grouped["WinRate"] = grouped["WinRate"] * 100
+    grouped["ProfitFactor"] = grouped["GrossProfit"] / grouped["GrossLoss"].abs().replace(0, np.nan)
+    grouped["ReturnPercent"] = grouped["TotalPnL"] / grouped["StartBalance"] * 100
+    grouped["Month"] = grouped["Month"].astype(str)
+
+    grouped.columns = [
+        "Month", "Trades", "Wins", "Losses", "Win Rate",
+        "Gross Profit", "Gross Loss", "Total PnL", "Average PnL",
+        "Median PnL (middle value not affected by outliers)",
+        "Standard Deviation PnL (measures how spread out results are)",
+        "Max Win", "Max Loss", "Average R Multiple", "Average Risk",
+        "Average Duration Minutes", "Start Balance", "End Balance",
+        "Profit Factor", "Return Percent"
+    ]
+
+    grouped.to_csv(os.path.join(out_dir, "02 Monthly Breakdown.csv"), index=False, float_format="%.2f")
+    print("  [done] 02 Monthly Breakdown.csv")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  03: WEEKLY BREAKDOWN
+# ══════════════════════════════════════════════════════════════════════════════
+
+def report_weekly_breakdown(df, out_dir):
+    grouped = df.groupby("Week").agg(
+        Trades=("PnL", "count"),
+        Wins=("Win", "sum"),
+        Losses=("Loss", "sum"),
+        WinRate=("Win", "mean"),
+        TotalPnL=("PnL", "sum"),
+        AveragePnL=("PnL", "mean"),
+        AvgR=("R Multiple", "mean"),
+        StartBalance=("Balance Pre ($)", "first"),
+        EndBalance=("Balance Post ($)", "last"),
+        WeekStart=("Entry Time", "min"),
+        WeekEnd=("Entry Time", "max"),
+    ).reset_index()
+
+    grouped["WinRate"] = grouped["WinRate"] * 100
+    grouped["ReturnPercent"] = grouped["TotalPnL"] / grouped["StartBalance"] * 100
+    grouped["Week Number"] = range(1, len(grouped) + 1)
+    grouped["Week Day Start"] = grouped["WeekStart"].dt.day_name()
+    grouped["Week Day End"] = grouped["WeekEnd"].dt.day_name()
+    grouped["Week Period"] = grouped["Week"].astype(str)
+
+    final = grouped[["Week Number", "Week Period", "Week Day Start", "Week Day End",
+                      "Trades", "Wins", "Losses", "WinRate", "TotalPnL", "AveragePnL",
+                      "AvgR", "StartBalance", "EndBalance", "ReturnPercent"]]
+    final.columns = ["Week Number", "Week Period", "Week Day Start", "Week Day End",
+                     "Trades", "Wins", "Losses", "Win Rate", "Total PnL", "Average PnL",
+                     "Average R Multiple", "Start Balance", "End Balance", "Return Percent"]
+
+    final.to_csv(os.path.join(out_dir, "03 Weekly Breakdown.csv"), index=False, float_format="%.2f")
+    print("  [done] 03 Weekly Breakdown.csv")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  04: DAILY BREAKDOWN + ADVANCED DAILY ANALYSIS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def report_daily_breakdown(df, out_dir):
+    all_dates = pd.date_range(df["Entry Time"].min().date(), df["Entry Time"].max().date(), freq="B")
+
+    daily_data = []
+    for date in all_dates:
+        d = date.date()
+        sub = df[df["Entry Date"] == d]
+        if len(sub) == 0:
+            daily_data.append({
+                "Date": d, "Weekday": date.day_name(),
+                "Trades": 0, "Wins": 0, "Losses": 0,
+                "Win Rate": 0, "Total PnL": 0, "Average R Multiple": 0,
+                "Start Balance": None, "End Balance": None, "Return Percent": 0,
+            })
+        else:
+            start_b = sub["Balance Pre ($)"].iloc[0]
+            end_b = sub["Balance Post ($)"].iloc[-1]
+            daily_data.append({
+                "Date": d, "Weekday": date.day_name(),
+                "Trades": len(sub), "Wins": int(sub["Win"].sum()),
+                "Losses": int(sub["Loss"].sum()),
+                "Win Rate": sub["Win"].mean() * 100,
+                "Total PnL": sub["PnL"].sum(),
+                "Average R Multiple": sub["R Multiple"].mean(),
+                "Start Balance": start_b, "End Balance": end_b,
+                "Return Percent": sub["PnL"].sum() / start_b * 100,
+            })
+
+    daily_df = pd.DataFrame(daily_data)
+    daily_df.to_csv(os.path.join(out_dir, "04 Daily Breakdown.csv"), index=False, float_format="%.2f")
+
+    # ── ADVANCED DAILY ANALYSIS ──
+    trading_days = daily_df[daily_df["Trades"] > 0].copy()
+
+    with open(os.path.join(out_dir, "04b Advanced Daily Analysis.txt"), "w") as f:
+        write_header(f, "ADVANCED DAILY ANALYSIS")
+
+        win_days = (trading_days["Total PnL"] > 0).sum()
+        loss_days = (trading_days["Total PnL"] <= 0).sum()
+        total_days = len(trading_days)
+        avg_pnl_win_day = trading_days.loc[trading_days["Total PnL"] > 0, "Total PnL"].mean() if win_days > 0 else 0
+        avg_pnl_loss_day = trading_days.loc[trading_days["Total PnL"] <= 0, "Total PnL"].mean() if loss_days > 0 else 0
+
+        f.write("─" * 60 + "\n")
+        f.write("  OVERALL DAILY STATISTICS\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  Total Trading Days:              {total_days}\n")
+        f.write(f"  Days in Profit (win days):       {win_days} ({win_days/total_days*100:.1f}%)\n")
+        f.write(f"  Days in Loss (loss days):        {loss_days} ({loss_days/total_days*100:.1f}%)\n")
+        f.write(f"  Average PnL on Win Days:         {fmt_money(avg_pnl_win_day)}\n")
+        f.write(f"  Average PnL on Loss Days:        {fmt_money(avg_pnl_loss_day)}\n\n")
+
+        f.write("─" * 60 + "\n")
+        f.write("  WIN DAYS vs LOSS DAYS PER MONTH\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  {'Month':<12s}  {'Win Days':>10s}  {'Loss Days':>10s}  {'Win Day %':>10s}  {'Avg Win Day':>14s}  {'Avg Loss Day':>14s}\n")
+        f.write("  " + "-" * 75 + "\n")
+
+        trading_days["Month"] = pd.to_datetime(trading_days["Date"]).dt.to_period("M")
+        for month in sorted(trading_days["Month"].unique()):
+            m_sub = trading_days[trading_days["Month"] == month]
+            m_win = (m_sub["Total PnL"] > 0).sum()
+            m_loss = (m_sub["Total PnL"] <= 0).sum()
+            m_total = len(m_sub)
+            m_avg_w = m_sub.loc[m_sub["Total PnL"] > 0, "Total PnL"].mean() if m_win > 0 else 0
+            m_avg_l = m_sub.loc[m_sub["Total PnL"] <= 0, "Total PnL"].mean() if m_loss > 0 else 0
+            f.write(f"  {str(month):<12s}  {m_win:>10d}  {m_loss:>10d}  {m_win/m_total*100:>9.1f}%  {fmt_money(m_avg_w):>14s}  {fmt_money(m_avg_l):>14s}\n")
+
+        f.write("\n\n")
+        f.write("─" * 60 + "\n")
+        f.write("  WIN DAYS vs LOSS DAYS PER WEEKDAY\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  {'Weekday':<12s}  {'Win Days':>10s}  {'Loss Days':>10s}  {'Win Day %':>10s}  {'Avg Win Day':>14s}  {'Avg Loss Day':>14s}\n")
+        f.write("  " + "-" * 75 + "\n")
+
+        for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]:
+            d_sub = trading_days[trading_days["Weekday"] == day]
+            if len(d_sub) == 0:
+                continue
+            d_win = (d_sub["Total PnL"] > 0).sum()
+            d_loss = (d_sub["Total PnL"] <= 0).sum()
+            d_total = len(d_sub)
+            d_avg_w = d_sub.loc[d_sub["Total PnL"] > 0, "Total PnL"].mean() if d_win > 0 else 0
+            d_avg_l = d_sub.loc[d_sub["Total PnL"] <= 0, "Total PnL"].mean() if d_loss > 0 else 0
+            f.write(f"  {day:<12s}  {d_win:>10d}  {d_loss:>10d}  {d_win/d_total*100:>9.1f}%  {fmt_money(d_avg_w):>14s}  {fmt_money(d_avg_l):>14s}\n")
+
+    print("  [done] 04 Daily Breakdown.csv")
+    print("  [done] 04b Advanced Daily Analysis.txt")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  05: DRAWDOWN AND RECOVERY ANALYSIS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def report_drawdown_recovery(df, out_dir):
+    balance = df["Balance Post ($)"].values
+    peak = np.maximum.accumulate(balance)
+    dd = balance - peak
+    dd_pct = dd / peak * 100
+
+    in_dd = False
+    dd_events = []
+    start_idx = 0
+
+    for i in range(len(dd)):
+        if dd[i] < 0 and not in_dd:
+            in_dd = True
+            start_idx = i
+        elif dd[i] == 0 and in_dd:
+            in_dd = False
+            min_idx = start_idx + np.argmin(dd[start_idx:i])
+            dd_events.append({
+                "Start Trade": start_idx + 1,
+                "Trough Trade": min_idx + 1,
+                "End Trade": i + 1,
+                "Duration Trades": i - start_idx,
+                "Max Drawdown Dollar": dd[min_idx],
+                "Max Drawdown Percent": dd_pct[min_idx],
+                "Start Date": str(df.iloc[start_idx]["Entry Time"].date()),
+                "Trough Date": str(df.iloc[min_idx]["Entry Time"].date()),
+                "End Date": str(df.iloc[i]["Entry Time"].date()),
+                "Recovery Trades": i - min_idx,
+                "Peak Balance": peak[start_idx],
+                "Trough Balance": balance[min_idx],
+            })
+
+    dd_events.sort(key=lambda x: x["Max Drawdown Dollar"])
+
+    total_trades_in_dd = sum(1 for d in dd if d < 0)
+    pct_time_underwater = total_trades_in_dd / len(dd) * 100
+    avg_dd = dd[dd < 0].mean() if len(dd[dd < 0]) > 0 else 0
+    avg_dd_pct = dd_pct[dd_pct < 0].mean() if len(dd_pct[dd_pct < 0]) > 0 else 0
+
+    with open(os.path.join(out_dir, "05 Drawdown and Recovery Analysis.txt"), "w") as f:
+        write_header(f, "DRAWDOWN AND RECOVERY ANALYSIS")
+
+        f.write("  CLASSIFICATION CRITERIA:\n")
+        f.write("  Drawdown events are ranked by the absolute dollar amount lost\n")
+        f.write("  from peak to trough. Only fully recovered drawdowns are listed.\n")
+        f.write("  Each event shows the peak balance before the drawdown began,\n")
+        f.write("  the lowest point reached (trough), the percentage decline,\n")
+        f.write("  and how many trades it took to fully recover to a new peak.\n")
+        f.write("  Ongoing (unrecovered) drawdowns are excluded from this analysis\n")
+        f.write("  because recovery metrics cannot be measured yet.\n\n")
+
+        f.write("─" * 60 + "\n")
+        f.write("  SUMMARY\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  Maximum Drawdown ($):            {fmt_money(dd.min())}\n")
+        f.write(f"  Maximum Drawdown (%):            {dd_pct.min():.2f}%\n")
+        f.write(f"  Average Drawdown ($):            {fmt_money(avg_dd)}\n")
+        f.write(f"  Average Drawdown (%):            {avg_dd_pct:.2f}%\n")
+        f.write(f"  Trades Underwater:               {total_trades_in_dd}/{len(dd)} ({pct_time_underwater:.1f}%)\n")
+        f.write(f"  Total Recovered Drawdown Events: {len(dd_events)}\n\n")
+
+        f.write("─" * 60 + "\n")
+        f.write("  TOP 15 DRAWDOWN EVENTS (ranked by dollar loss)\n")
+        f.write("─" * 60 + "\n\n")
+
+        for i, ev in enumerate(dd_events[:15], 1):
+            f.write(f"  #{i}\n")
+            f.write(f"    Peak Balance:         {fmt_money(ev['Peak Balance'])}\n")
+            f.write(f"    Trough Balance:       {fmt_money(ev['Trough Balance'])}\n")
+            f.write(f"    Maximum Drawdown:     {fmt_money(ev['Max Drawdown Dollar'])} ({ev['Max Drawdown Percent']:.2f}%)\n")
+            f.write(f"    Start Date:           {ev['Start Date']}\n")
+            f.write(f"    Trough Date:          {ev['Trough Date']}\n")
+            f.write(f"    Recovery Date:        {ev['End Date']}\n")
+            f.write(f"    Total Duration:       {ev['Duration Trades']} trades\n")
+            f.write(f"    Recovery Duration:    {ev['Recovery Trades']} trades (from trough to new peak)\n\n")
+
+        if dd_events:
+            rec_trades = [e["Recovery Trades"] for e in dd_events]
+            dur_trades = [e["Duration Trades"] for e in dd_events]
+            f.write("─" * 60 + "\n")
+            f.write("  RECOVERY STATISTICS\n")
+            f.write("─" * 60 + "\n")
+            f.write(f"  Average Recovery Time:           {np.mean(rec_trades):.1f} trades\n")
+            f.write(f"  Fastest Recovery:                {min(rec_trades)} trades\n")
+            f.write(f"  Slowest Recovery:                {max(rec_trades)} trades\n")
+            f.write(f"  Average Total Drawdown Duration: {np.mean(dur_trades):.1f} trades\n")
+
+    print("  [done] 05 Drawdown and Recovery Analysis.txt")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  06: STREAK ANALYSIS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def report_streak_analysis(df, out_dir):
+    results = df["Win"].values
+    streaks_win = []
+    streaks_loss = []
+    current = 0
+    current_type = None
+    streak_pnl = 0
+
+    for i, w in enumerate(results):
+        if current_type is None:
+            current_type = w
+            current = 1
+            streak_pnl = df.iloc[i]["PnL"]
+        elif w == current_type:
+            current += 1
+            streak_pnl += df.iloc[i]["PnL"]
+        else:
+            entry = {"Length": current, "PnL": streak_pnl, "End Trade": i,
+                     "End Date": str(df.iloc[i - 1]["Entry Time"].date())}
+            if current_type:
+                streaks_win.append(entry)
+            else:
+                streaks_loss.append(entry)
+            current_type = w
+            current = 1
+            streak_pnl = df.iloc[i]["PnL"]
+
+    entry = {"Length": current, "PnL": streak_pnl, "End Trade": len(results),
+             "End Date": str(df.iloc[-1]["Entry Time"].date())}
+    if current_type:
+        streaks_win.append(entry)
+    else:
+        streaks_loss.append(entry)
+
+    streaks_win.sort(key=lambda x: x["Length"], reverse=True)
+    streaks_loss.sort(key=lambda x: x["Length"], reverse=True)
+    win_lengths = [s["Length"] for s in streaks_win]
+    loss_lengths = [s["Length"] for s in streaks_loss]
+
+    with open(os.path.join(out_dir, "06 Streak Analysis.txt"), "w") as f:
+        write_header(f, "WIN AND LOSS STREAK ANALYSIS")
+
+        f.write("─" * 60 + "\n")
+        f.write("  WIN STREAKS\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  Longest Win Streak:       {max(win_lengths)} trades\n")
+        f.write(f"  Average Win Streak:       {np.mean(win_lengths):.2f} trades\n")
+        f.write(f"  Median Win Streak:        {np.median(win_lengths):.1f} trades\n")
+        f.write(f"  Total Win Streaks:        {len(streaks_win)}\n\n")
+        f.write("  Top 10 Win Streaks:\n")
+        for i, s in enumerate(streaks_win[:10], 1):
+            f.write(f"    #{i:2d}  {s['Length']:3d} wins  |  PnL: {fmt_money(s['PnL']):>14s}  |  Ended: {s['End Date']}\n")
+
+        f.write("\n\n")
+        f.write("─" * 60 + "\n")
+        f.write("  LOSS STREAKS\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  Longest Loss Streak:      {max(loss_lengths)} trades\n")
+        f.write(f"  Average Loss Streak:      {np.mean(loss_lengths):.2f} trades\n")
+        f.write(f"  Median Loss Streak:       {np.median(loss_lengths):.1f} trades\n")
+        f.write(f"  Total Loss Streaks:       {len(streaks_loss)}\n\n")
+        f.write("  Top 10 Loss Streaks:\n")
+        for i, s in enumerate(streaks_loss[:10], 1):
+            f.write(f"    #{i:2d}  {s['Length']:3d} losses  |  PnL: {fmt_money(s['PnL']):>14s}  |  Ended: {s['End Date']}\n")
+
+        f.write("\n\n")
+        f.write("─" * 60 + "\n")
+        f.write("  STREAK LENGTH DISTRIBUTION\n")
+        f.write("─" * 60 + "\n")
+        all_w = pd.Series(win_lengths)
+        all_l = pd.Series(loss_lengths)
+        for length in range(1, max(max(win_lengths), max(loss_lengths)) + 1):
+            w_count = (all_w == length).sum()
+            l_count = (all_l == length).sum()
+            if w_count > 0 or l_count > 0:
+                f.write(f"    Length {length:2d}:  Win streaks: {w_count:3d}  |  Loss streaks: {l_count:3d}\n")
+
+    print("  [done] 06 Streak Analysis.txt")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  07: DIRECTION ANALYSIS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def report_direction_analysis(df, out_dir):
+    with open(os.path.join(out_dir, "07 Direction Analysis.txt"), "w") as f:
+        write_header(f, "DIRECTION ANALYSIS — LONG vs SHORT")
+
+        for direction in ["LONG", "SHORT"]:
+            sub = df[df["Direction"] == direction]
+            if len(sub) == 0:
+                continue
+            wins = sub["Win"].sum()
+            total = len(sub)
+            wr = wins / total * 100
+            pnl = sub["PnL"].sum()
+            avg_pnl = sub["PnL"].mean()
+            avg_win = sub.loc[sub["Win"], "PnL"].mean() if wins > 0 else 0
+            avg_loss = sub.loc[sub["Loss"], "PnL"].mean() if (total - wins) > 0 else 0
+            gp = sub.loc[sub["Win"], "PnL"].sum()
+            gl = abs(sub.loc[sub["Loss"], "PnL"].sum())
+            pf = gp / gl if gl > 0 else float("inf")
+            avg_r = sub["R Multiple"].mean()
+            avg_dur = sub["Duration"].mean()
+
+            f.write("─" * 60 + "\n")
+            f.write(f"  {direction}\n")
+            f.write("─" * 60 + "\n")
+            f.write(f"  Trades:                   {total} ({total/len(df)*100:.1f}% of total)\n")
+            f.write(f"  Wins:                     {wins}\n")
+            f.write(f"  Losses:                   {total - wins}\n")
+            f.write(f"  Win Rate:                 {wr:.2f}%\n")
+            f.write(f"  Total Profit and Loss:    {fmt_money(pnl)}\n")
+            f.write(f"  Average Profit and Loss:  {fmt_money(avg_pnl)}\n")
+            f.write(f"  Average Win:              {fmt_money(avg_win)}\n")
+            f.write(f"  Average Loss:             {fmt_money(avg_loss)}\n")
+            f.write(f"  Profit Factor:            {pf:.4f}\n")
+            f.write(f"  Average R-Multiple:       {avg_r:.4f}R\n")
+            f.write(f"  Average Duration:         {avg_dur:.1f} minutes\n\n")
+
+    print("  [done] 07 Direction Analysis.txt")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  08: TIME ANALYSIS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def report_time_analysis(df, out_dir):
+    with open(os.path.join(out_dir, "08 Time Analysis.txt"), "w") as f:
+        write_header(f, "TIME-BASED ANALYSIS")
+
+        f.write("─" * 60 + "\n")
+        f.write("  PERFORMANCE BY ENTRY HOUR RANGE (UTC)\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  {'Hour Range':<14s}  {'Trades':>7s}  {'Win Rate':>9s}  {'Total PnL':>14s}  {'Average R':>10s}  {'Profit Factor':>14s}\n")
+        f.write("  " + "-" * 72 + "\n")
+
+        for h in sorted(df["Entry Hour"].unique()):
+            sub = df[df["Entry Hour"] == h]
+            wr = sub["Win"].mean() * 100
+            pnl = sub["PnL"].sum()
+            avg_r = sub["R Multiple"].mean()
+            gp = sub.loc[sub["Win"], "PnL"].sum()
+            gl = abs(sub.loc[sub["Loss"], "PnL"].sum())
+            pf = gp / gl if gl > 0 else 0
+            f.write(f"  {hour_range(h):<14s}  {len(sub):7d}  {wr:7.1f}%  {fmt_money(pnl):>14s}  {avg_r:9.3f}R  {pf:14.3f}\n")
+
+        f.write("\n\n")
+        f.write("─" * 60 + "\n")
+        f.write("  PERFORMANCE BY WEEKDAY\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  {'Day':<12s}  {'Trades':>7s}  {'Win Rate':>9s}  {'Total PnL':>14s}  {'Average R':>10s}\n")
+        f.write("  " + "-" * 55 + "\n")
+
+        for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]:
+            sub = df[df["Entry Weekday"] == day]
+            if len(sub) == 0:
+                continue
+            wr = sub["Win"].mean() * 100
+            pnl = sub["PnL"].sum()
+            avg_r = sub["R Multiple"].mean()
+            f.write(f"  {day:<12s}  {len(sub):7d}  {wr:7.1f}%  {fmt_money(pnl):>14s}  {avg_r:9.3f}R\n")
+
+        f.write("\n\n")
+        f.write("─" * 60 + "\n")
+        f.write("  PERFORMANCE BY CALENDAR MONTH\n")
+        f.write("─" * 60 + "\n")
+        f.write(f"  {'Month':<12s}  {'Trades':>7s}  {'Win Rate':>9s}  {'Total PnL':>14s}  {'Average R':>10s}\n")
+        f.write("  " + "-" * 55 + "\n")
+
+        month_names = ["January", "February", "March", "April", "May", "June",
+                       "July", "August", "September", "October", "November", "December"]
+        for m in range(1, 13):
+            sub = df[df["Entry Time"].dt.month == m]
+            if len(sub) == 0:
+                continue
+            wr = sub["Win"].mean() * 100
+            pnl = sub["PnL"].sum()
+            avg_r = sub["R Multiple"].mean()
+            f.write(f"  {month_names[m-1]:<12s}  {len(sub):7d}  {wr:7.1f}%  {fmt_money(pnl):>14s}  {avg_r:9.3f}R\n")
+
+    print("  [done] 08 Time Analysis.txt")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  09: TRADE DURATION ANALYSIS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def report_trade_duration(df, out_dir):
+    dur = df["Duration"]
+    dur_win = df.loc[df["Win"], "Duration"]
+    dur_loss = df.loc[df["Loss"], "Duration"]
+
+    with open(os.path.join(out_dir, "09 Trade Duration Analysis.txt"), "w") as f:
+        write_header(f, "TRADE DURATION ANALYSIS")
+
+        f.write("  This report analyzes how long trades stay open, measured\n")
+        f.write("  in minutes from entry to exit.\n\n")
+
+        for label, data in [("ALL TRADES", dur), ("WINNING TRADES", dur_win), ("LOSING TRADES", dur_loss)]:
+            f.write("─" * 60 + "\n")
+            f.write(f"  {label}\n")
+            f.write("─" * 60 + "\n")
+            f.write(f"  Count:                    {len(data)} trades\n\n")
+            f.write(f"  Mean (average duration):  {data.mean():.1f} minutes\n")
+            f.write(f"    The arithmetic average of all trade durations.\n\n")
+            f.write(f"  Median (middle value):    {data.median():.1f} minutes\n")
+            f.write(f"    Half of all trades lasted less than this, half lasted\n")
+            f.write(f"    more. Not affected by outliers like very long trades.\n\n")
+            f.write(f"  Standard Deviation:       {data.std():.1f} minutes\n")
+            f.write(f"    Measures how spread out the durations are. A high value\n")
+            f.write(f"    means trade durations vary a lot from trade to trade.\n\n")
+            f.write(f"  Minimum Duration:         {data.min():.1f} minutes\n")
+            f.write(f"    The shortest trade in this category.\n\n")
+            f.write(f"  Maximum Duration:         {data.max():.1f} minutes\n")
+            f.write(f"    The longest trade in this category.\n\n")
+            f.write(f"  Skewness:                 {data.skew():.4f}\n")
+            f.write(f"    Measures asymmetry. Positive skew means most trades\n")
+            f.write(f"    are short but a few last much longer (right tail).\n")
+            f.write(f"    Negative skew would mean the opposite.\n\n")
+            f.write("  Percentiles (what percentage of trades are below this duration):\n")
+            for p in [10, 25, 50, 75, 90, 95, 99]:
+                f.write(f"    {p}th percentile:  {np.percentile(data, p):.1f} minutes")
+                if p == 50:
+                    f.write("  (same as the median)")
+                f.write("\n")
+            f.write("\n")
+
+        f.write("─" * 60 + "\n")
+        f.write("  DURATION BUCKETS\n")
+        f.write("─" * 60 + "\n")
+        f.write("  Trades grouped by how long they lasted:\n\n")
+        bins = [0, 5, 15, 30, 60, 120, 300, 600, float("inf")]
+        labels_b = ["0-5 min", "5-15 min", "15-30 min", "30-60 min", "1-2 hours", "2-5 hours", "5-10 hours", "10+ hours"]
+        df_temp = df.copy()
+        df_temp["Duration Bucket"] = pd.cut(df_temp["Duration"], bins=bins, labels=labels_b, right=False)
+        for bucket in labels_b:
+            sub = df_temp[df_temp["Duration Bucket"] == bucket]
+            if len(sub) == 0:
+                continue
+            wr = sub["Win"].mean() * 100
+            pnl = sub["PnL"].sum()
+            f.write(f"  {bucket:>12s}  |  {len(sub):4d} trades  |  Win Rate: {wr:5.1f}%  |  Total PnL: {fmt_money(pnl):>14s}\n")
+
+    print("  [done] 09 Trade Duration Analysis.txt")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  10: DISTRIBUTION ANALYSIS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def report_distribution(df, out_dir):
+    pnl = df["PnL"]
+    r_mult = df["R Multiple"]
+
+    with open(os.path.join(out_dir, "10 Distribution Analysis.txt"), "w") as f:
+        write_header(f, "PROFIT AND LOSS DISTRIBUTION ANALYSIS")
+
+        f.write("  This report shows how trade results are distributed,\n")
+        f.write("  helping you understand the shape and spread of your returns.\n\n")
+
+        for label, data, unit in [("DOLLAR PROFIT AND LOSS", pnl, "$"), ("R-MULTIPLE", r_mult, "R")]:
+            f.write("─" * 60 + "\n")
+            f.write(f"  {label} DISTRIBUTION\n")
+            f.write("─" * 60 + "\n\n")
+            f.write(f"  Mean (average):           {data.mean():.2f} {unit}\n")
+            f.write(f"    The average result across all trades.\n\n")
+            f.write(f"  Median (middle value):    {data.median():.2f} {unit}\n")
+            f.write(f"    The middle trade when sorted. Not affected by extremes.\n\n")
+            f.write(f"  Standard Deviation:       {data.std():.2f} {unit}\n")
+            f.write(f"    How much results vary from trade to trade. Higher means\n")
+            f.write(f"    more volatile results.\n\n")
+            f.write(f"  Skewness:                 {data.skew():.4f}\n")
+            f.write(f"    Positive skew means more large winners than large losers.\n")
+            f.write(f"    Negative skew means the opposite. Zero means symmetric.\n\n")
+            f.write(f"  Kurtosis:                 {data.kurtosis():.4f}\n")
+            f.write(f"    Measures how heavy the tails are. High kurtosis means\n")
+            f.write(f"    more extreme results (both big wins and big losses)\n")
+            f.write(f"    than a normal distribution would predict.\n\n")
+            f.write(f"  Minimum:                  {data.min():.2f} {unit}\n")
+            f.write(f"  Maximum:                  {data.max():.2f} {unit}\n\n")
+            f.write("  Percentiles:\n")
+            for p in [1, 5, 10, 25, 50, 75, 90, 95, 99]:
+                f.write(f"    {p:2d}th percentile:  {np.percentile(data, p):.2f} {unit}\n")
+            f.write("\n")
+
+        f.write("─" * 60 + "\n")
+        f.write("  R-MULTIPLE DISTRIBUTION TABLE\n")
+        f.write("─" * 60 + "\n")
+        f.write("  Shows how many trades fall into each R-multiple range:\n\n")
+        r_bins = [-10, -1, -0.5, 0, 0.5, 1, 1.5, 2, 2.5, 3, 5, 10]
+        for i in range(len(r_bins) - 1):
+            count = ((r_mult >= r_bins[i]) & (r_mult < r_bins[i + 1])).sum()
+            pct = count / len(r_mult) * 100
+            bar = "█" * int(pct / 2)
+            f.write(f"  [{r_bins[i]:>5.1f}R to {r_bins[i+1]:>5.1f}R)  {count:4d} trades  ({pct:5.1f}%)  {bar}\n")
+
+    print("  [done] 10 Distribution Analysis.txt")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  11: CONSISTENCY REPORT
+# ══════════════════════════════════════════════════════════════════════════════
+
+def report_consistency(df, out_dir):
+    monthly = df.groupby("Month")["PnL"].sum()
+    weekly = df.groupby("Week")["PnL"].sum()
+    daily = df.groupby("Entry Date")["PnL"].sum()
+
+    with open(os.path.join(out_dir, "11 Consistency Report.txt"), "w") as f:
+        write_header(f, "CONSISTENCY AND STABILITY REPORT")
+
+        f.write("  This report measures how consistently the strategy produces\n")
+        f.write("  positive results across different time frames.\n\n")
+
+        for label, data in [("MONTHLY", monthly), ("WEEKLY", weekly), ("DAILY", daily)]:
+            pos = (data > 0).sum()
+            loss_count = (data <= 0).sum()
+            total = len(data)
+            pct = pos / total * 100
+
+            f.write("─" * 60 + "\n")
+            f.write(f"  {label} CONSISTENCY\n")
+            f.write("─" * 60 + "\n\n")
+            f.write(f"  Profitable Periods:       {pos} out of {total} ({pct:.1f}%)\n")
+            f.write(f"    How many {label.lower()} periods closed in profit.\n\n")
+            f.write(f"  Loss Periods:             {loss_count} out of {total}\n")
+            f.write(f"    How many {label.lower()} periods closed at breakeven or in loss.\n\n")
+            f.write(f"  Best Period:              {fmt_money(data.max())}\n")
+            f.write(f"    The single best {label.lower()} result.\n\n")
+            f.write(f"  Worst Period:             {fmt_money(data.min())}\n")
+            f.write(f"    The single worst {label.lower()} result.\n\n")
+            f.write(f"  Average PnL:              {fmt_money(data.mean())}\n")
+            f.write(f"    The average profit or loss per {label.lower()} period.\n\n")
+            f.write(f"  Median PnL:               {fmt_money(data.median())}\n")
+            f.write(f"    The middle value. Not affected by extreme periods.\n\n")
+            f.write(f"  Standard Deviation:       {fmt_money(data.std())}\n")
+            f.write(f"    How much {label.lower()} results vary. Lower means more\n")
+            f.write(f"    consistent. Higher means more volatile results.\n\n")
+            if data.mean() != 0:
+                cov = abs(data.std() / data.mean())
+                f.write(f"  Coefficient of Variation: {cov:.4f}\n")
+                f.write(f"    Standard Deviation divided by the Mean. Lower values\n")
+                f.write(f"    indicate more stable, predictable returns.\n")
+            f.write("\n")
+
+    print("  [done] 11 Consistency Report.txt")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  12: EDGE AND EXPECTANCY
+# ══════════════════════════════════════════════════════════════════════════════
+
+def report_edge_expectancy(df, out_dir):
+    with open(os.path.join(out_dir, "12 Edge and Expectancy.txt"), "w") as f:
+        write_header(f, "EDGE AND EXPECTANCY DEEP DIVE")
+
+        f.write("  Expectancy tells you how much you can expect to make (or lose)\n")
+        f.write("  on every single trade on average. It is the mathematical edge\n")
+        f.write("  of the strategy.\n\n")
+
+        wr = df["Win"].mean()
+        avg_w = df.loc[df["Win"], "R Multiple"].mean() if df["Win"].sum() > 0 else 0
+        avg_l = abs(df.loc[df["Loss"], "R Multiple"].mean()) if df["Loss"].sum() > 0 else 0
+        expectancy_r = wr * avg_w - (1 - wr) * avg_l
+        payoff = avg_w / avg_l if avg_l > 0 else float("inf")
+        breakeven_wr = 1 / (1 + payoff) * 100 if payoff > 0 else 100
+        edge = (wr * 100) - breakeven_wr
+
+        f.write("─" * 60 + "\n")
+        f.write("  EXPECTANCY MODEL\n")
+        f.write("─" * 60 + "\n\n")
+        f.write(f"  Win Rate:                     {wr*100:.2f}%\n")
+        f.write(f"    Percentage of trades that hit take profit.\n\n")
+        f.write(f"  Average Win (R-Multiple):     {avg_w:.4f}R\n")
+        f.write(f"    On average, each winning trade returns {avg_w:.2f} times\n")
+        f.write(f"    the amount risked.\n\n")
+        f.write(f"  Average Loss (R-Multiple):    {avg_l:.4f}R\n")
+        f.write(f"    On average, each losing trade loses {avg_l:.2f} times\n")
+        f.write(f"    the amount risked.\n\n")
+        f.write(f"  Payoff Ratio:                 {payoff:.4f}\n")
+        f.write(f"    Average Win divided by Average Loss in R terms.\n\n")
+        f.write(f"  Breakeven Win Rate:           {breakeven_wr:.2f}%\n")
+        f.write(f"    The minimum win rate needed to break even given this\n")
+        f.write(f"    payoff ratio. Any win rate above this means the strategy\n")
+        f.write(f"    has a positive edge.\n\n")
+        f.write(f"  Edge Over Breakeven:          {edge:+.2f}%\n")
+        f.write(f"    How much the actual win rate exceeds the breakeven point.\n")
+        f.write(f"    This is the strategy's mathematical advantage.\n\n")
+        f.write(f"  Expectancy per Trade (R):     {expectancy_r:+.4f}R\n")
+        f.write(f"    On average, each trade is expected to return {expectancy_r:.4f}\n")
+        f.write(f"    times the amount risked.\n\n")
+        f.write(f"  Expectancy per Trade ($):     {fmt_money(df['PnL'].mean())}\n")
+        f.write(f"    The average dollar profit or loss per trade.\n\n")
+
+        f.write("─" * 60 + "\n")
+        f.write("  EXPECTANCY BY DIRECTION\n")
+        f.write("─" * 60 + "\n\n")
+        for d in ["LONG", "SHORT"]:
+            sub = df[df["Direction"] == d]
+            if len(sub) == 0:
+                continue
+            wr_d = sub["Win"].mean()
+            avg_w_d = sub.loc[sub["Win"], "R Multiple"].mean() if sub["Win"].sum() > 0 else 0
+            avg_l_d = abs(sub.loc[sub["Loss"], "R Multiple"].mean()) if sub["Loss"].sum() > 0 else 0
+            exp_d = wr_d * avg_w_d - (1 - wr_d) * avg_l_d
+            f.write(f"  {d:6s}:  Win Rate {wr_d*100:5.1f}%  |  Expectancy: {exp_d:+.4f}R  |  Average PnL: {fmt_money(sub['PnL'].mean())}\n")
+
+        f.write("\n\n")
+        f.write("─" * 60 + "\n")
+        f.write("  EXPECTANCY BY ENTRY HOUR RANGE\n")
+        f.write("─" * 60 + "\n\n")
+        for h in sorted(df["Entry Hour"].unique()):
+            sub = df[df["Entry Hour"] == h]
+            exp_h = sub["R Multiple"].mean()
+            f.write(f"  {hour_range(h)}   {len(sub):4d} trades  |  Expectancy: {exp_h:+.4f}R  |  Total PnL: {fmt_money(sub['PnL'].sum())}\n")
+
+    print("  [done] 12 Edge and Expectancy.txt")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  13: BEST AND WORST TRADES
+# ══════════════════════════════════════════════════════════════════════════════
+
+def report_best_worst(df, out_dir):
+    cols = ["Trade Number", "Entry Time", "Direction", "Entry Price", "Exit Price",
+            "Result", "Risk", "PnL", "R Multiple", "Duration"]
+
+    best = df.nlargest(25, "PnL")[cols].copy()
+    worst = df.nsmallest(25, "PnL")[cols].copy()
+
+    combined = pd.concat([
+        best.assign(Category="Top 25 Wins"),
+        worst.assign(Category="Top 25 Losses")
+    ])
+
+    with open(os.path.join(out_dir, "13 Best and Worst Trades.csv"), "w") as fh:
+        fh.write("# Top 25 Best and Top 25 Worst trades categorized by PnL (dollar profit and loss)\n")
+        fh.write("# The Category column indicates whether the trade is among the top wins or top losses\n")
+    combined.to_csv(os.path.join(out_dir, "13 Best and Worst Trades.csv"), index=False, float_format="%.2f", mode="a")
+    print("  [done] 13 Best and Worst Trades.csv")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CHARTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def chart_equity_curve(df, out_dir):
+    fig, ax = plt.subplots(figsize=(16, 6))
+    ax.plot(range(len(df)), df["Balance Post ($)"], color=CYAN, linewidth=0.7, alpha=0.9)
+    ax.fill_between(range(len(df)), df["Balance Post ($)"], alpha=0.06, color=CYAN)
+    month_indices = df.groupby("Month").apply(lambda x: x.index[0])
+    for idx in month_indices:
+        ax.axvline(x=idx, color="#2a2e3a", linewidth=0.3, alpha=0.5)
+    ax.set_title("EQUITY CURVE (by trade)", fontsize=14, fontweight="bold", pad=15)
+    ax.set_xlabel("Trade Number")
+    ax.set_ylabel("Balance ($)")
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    fig.savefig(os.path.join(out_dir, "equity curve.png"))
+    plt.close()
+    print("  [done] equity curve.png")
+
+
+def chart_drawdown(df, out_dir):
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(18, 8), sharex=True)
+    dates = df["Entry Time"]
+    ax1.fill_between(dates, df["Drawdown"], color=RED, alpha=0.6, linewidth=0)
+    ax1.set_title("DRAWDOWN ($)", fontsize=12, fontweight="bold", pad=10)
+    ax1.set_ylabel("Drawdown ($)")
+    ax1.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+    ax1.grid(True, alpha=0.3)
+    ax1.xaxis.set_major_locator(mdates.MonthLocator())
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+
+    ax2.fill_between(dates, df["Drawdown Percent"], color=RED, alpha=0.6, linewidth=0)
+    ax2.set_title("DRAWDOWN (%)", fontsize=12, fontweight="bold", pad=10)
+    ax2.set_ylabel("Drawdown (%)")
+    ax2.grid(True, alpha=0.3)
+    ax2.xaxis.set_major_locator(mdates.MonthLocator())
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+    plt.setp(ax2.xaxis.get_majorticklabels(), rotation=45, ha="right")
+    plt.tight_layout()
+    fig.savefig(os.path.join(out_dir, "drawdown chart.png"))
+    plt.close()
+    print("  [done] drawdown chart.png")
+
+
+def chart_underwater(df, out_dir):
+    fig, ax = plt.subplots(figsize=(18, 5))
+    dates = df["Entry Time"]
+    ax.fill_between(dates, df["Drawdown Percent"], color=RED, alpha=0.5, linewidth=0)
+    ax.set_title("UNDERWATER EQUITY — Percentage Below Peak Over Time", fontsize=13, fontweight="bold", pad=15)
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Percent Below Peak (%)")
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+    plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right")
+    ax.grid(True, alpha=0.3)
+    ax.text(0.02, 0.05,
+            "This chart shows how far below the all-time peak equity\n"
+            "the account was at each point in time. 0% means a new\n"
+            "high was being made. Deeper red means larger drawdowns.",
+            transform=ax.transAxes, fontsize=8, color=GREY, va="bottom",
+            bbox=dict(boxstyle="round,pad=0.4", facecolor=DARK_BG, edgecolor="#2a2e3a", alpha=0.9))
+    plt.subplots_adjust(left=0.08, right=0.95, top=0.90, bottom=0.18)
+    fig.savefig(os.path.join(out_dir, "underwater equity.png"))
+    plt.close()
+    print("  [done] underwater equity.png")
+
+
+def chart_monthly_heatmap(df, out_dir):
+    df_temp = df.copy()
+    df_temp["Year"] = df_temp["Entry Time"].dt.year
+    df_temp["MonthNum"] = df_temp["Entry Time"].dt.month
+    pivot = df_temp.groupby(["Year", "MonthNum"])["PnL"].sum().reset_index()
+    bal_start = df_temp.groupby(["Year", "MonthNum"])["Balance Pre ($)"].first().reset_index()
+    pivot = pivot.merge(bal_start, on=["Year", "MonthNum"])
+    pivot["Return"] = pivot["PnL"] / pivot["Balance Pre ($)"] * 100
+    years = sorted(pivot["Year"].unique())
+    data = np.full((len(years), 12), np.nan)
+    for _, row in pivot.iterrows():
+        yi = years.index(row["Year"])
+        mi = int(row["MonthNum"]) - 1
+        data[yi][mi] = row["Return"]
+
+    fig, ax = plt.subplots(figsize=(14, 3))
+    colors_list = [RED, "#3a1a1a", "#1a2a1a", "#2a4a2a", GREEN]
+    positions = [0.0, 0.35, 0.5, 0.65, 1.0]
+    cmap = LinearSegmentedColormap.from_list("rg", list(zip(positions, colors_list)))
+    vmax = max(abs(np.nanmin(data)), abs(np.nanmax(data)))
+    im = ax.imshow(data, cmap=cmap, aspect="auto", vmin=-vmax, vmax=vmax)
+    ax.set_xticks(range(12))
+    ax.set_xticklabels(["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
+    ax.set_yticks(range(len(years)))
+    ax.set_yticklabels(years)
+    ax.set_title("MONTHLY RETURNS HEATMAP (%)", fontsize=12, fontweight="bold", pad=10)
+    for i in range(len(years)):
+        for j in range(12):
+            if not np.isnan(data[i][j]):
+                ax.text(j, i, f"{data[i][j]:+.1f}%", ha="center", va="center",
+                        fontsize=9, color=WHITE, fontweight="bold")
+    plt.colorbar(im, ax=ax, shrink=0.8, label="Return %")
+    plt.tight_layout()
+    fig.savefig(os.path.join(out_dir, "monthly returns heatmap.png"))
+    plt.close()
+    print("  [done] monthly returns heatmap.png")
+
+
+def chart_win_rate_by_hour(df, out_dir):
+    hourly = df.groupby("Entry Hour").agg(WR=("Win", "mean"), Trades=("PnL", "count"))
+    fig, ax1 = plt.subplots(figsize=(14, 6))
+    x_labels = [hour_range(h) for h in hourly.index]
+    bars = ax1.bar(range(len(hourly)), hourly["WR"] * 100,
+                   color=[GREEN if w > 0.35 else RED for w in hourly["WR"]], alpha=0.8, width=0.6)
+    ax1.axhline(y=df["Win"].mean() * 100, color=GOLD, linestyle="--", alpha=0.7, label="Average Win Rate")
+    ax1.set_title("WIN RATE BY ENTRY HOUR RANGE", fontsize=12, fontweight="bold", pad=10)
+    ax1.set_xlabel("Hour Range (UTC)")
+    ax1.set_ylabel("Win Rate %")
+    ax1.set_xticks(range(len(hourly)))
+    ax1.set_xticklabels(x_labels, rotation=45, ha="right")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3, axis="y")
+    for bar, count in zip(bars, hourly["Trades"]):
+        ax1.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
+                 f"n={count}", ha="center", va="bottom", fontsize=8, color=GREY)
+    plt.tight_layout()
+    fig.savefig(os.path.join(out_dir, "win rate by hour.png"))
+    plt.close()
+    print("  [done] win rate by hour.png")
+
+
+def chart_cumulative_return(df, out_dir):
+    fig, ax = plt.subplots(figsize=(16, 6))
+    ax.plot(df["Trade Number"], df["Cumulative Return"], color=CYAN, linewidth=0.8, alpha=0.9)
+    ax.fill_between(df["Trade Number"], df["Cumulative Return"], alpha=0.06, color=CYAN)
+    ax.set_title("CUMULATIVE RETURN BY TRADE", fontsize=13, fontweight="bold", pad=15)
+    ax.set_xlabel("Trade Number")
+    ax.set_ylabel("Cumulative Return %")
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    fig.savefig(os.path.join(out_dir, "cumulative return by trade.png"))
+    plt.close()
+    print("  [done] cumulative return by trade.png")
+
+
+def chart_direction_comparison(df, out_dir):
+    longs = df[df["Direction"] == "LONG"]
+    shorts = df[df["Direction"] == "SHORT"]
+    metrics = ["Win Rate", "Average R", "Average PnL", "Profit Factor"]
+    long_vals = [
+        longs["Win"].mean() * 100, longs["R Multiple"].mean(), longs["PnL"].mean(),
+        longs.loc[longs["Win"], "PnL"].sum() / abs(longs.loc[longs["Loss"], "PnL"].sum()) if longs["Loss"].sum() > 0 else 0,
+    ]
+    short_vals = [
+        shorts["Win"].mean() * 100, shorts["R Multiple"].mean(), shorts["PnL"].mean(),
+        shorts.loc[shorts["Win"], "PnL"].sum() / abs(shorts.loc[shorts["Loss"], "PnL"].sum()) if shorts["Loss"].sum() > 0 else 0,
+    ]
+    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+    for i, (m, lv, sv) in enumerate(zip(metrics, long_vals, short_vals)):
+        axes[i].bar([0, 1], [lv, sv], color=[GREEN, RED], alpha=0.8, width=0.5)
+        axes[i].set_xticks([0, 1])
+        axes[i].set_xticklabels(["LONG", "SHORT"])
+        axes[i].set_title(m, fontsize=10, fontweight="bold")
+        axes[i].grid(True, alpha=0.3, axis="y")
+        for xi, val in zip([0, 1], [lv, sv]):
+            fmt = f"{val:.1f}%" if "Rate" in m else f"{val:.3f}R" if "R" in m and "PnL" not in m else f"${val:,.0f}" if "PnL" in m else f"{val:.3f}"
+            axes[i].text(xi, val + abs(val) * 0.03, fmt, ha="center", va="bottom", fontsize=9, color=WHITE)
+    fig.suptitle("LONG vs SHORT COMPARISON", fontsize=13, fontweight="bold", y=1.02)
+    plt.tight_layout()
+    fig.savefig(os.path.join(out_dir, "direction comparison.png"), bbox_inches="tight")
+    plt.close()
+    print("  [done] direction comparison.png")
+
+
+def chart_risk_vs_return(df, out_dir):
+    fig, ax = plt.subplots(figsize=(12, 7))
+    colors = [GREEN if w else RED for w in df["Win"]]
+    ax.scatter(df["Risk"], df["PnL"], c=colors, alpha=0.3, s=15, edgecolors="none")
+    ax.axhline(y=0, color=GREY, linestyle="-", alpha=0.5)
+    ax.set_title("RISK vs RETURN SCATTER", fontsize=12, fontweight="bold", pad=15)
+    ax.set_xlabel("Risk per Trade ($)")
+    ax.set_ylabel("Profit and Loss ($)")
+    ax.grid(True, alpha=0.3)
+    ax.text(0.02, 0.95,
+            "Each dot is a trade. Green = win, Red = loss.\n"
+            "X-axis = how much was risked. Y-axis = actual result.\n"
+            "A healthy system shows green dots clustering higher\n"
+            "and farther from zero than red dots.",
+            transform=ax.transAxes, fontsize=8, color=GREY, va="top",
+            bbox=dict(boxstyle="round,pad=0.4", facecolor=DARK_BG, edgecolor="#2a2e3a", alpha=0.9))
+    plt.tight_layout()
+    fig.savefig(os.path.join(out_dir, "risk vs return scatter.png"))
+    plt.close()
+    print("  [done] risk vs return scatter.png")
+
+
+def chart_duration_analysis(df, out_dir):
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    ax1 = axes[0]
+    ax1.hist(df.loc[df["Win"], "Duration"], bins=40, color=GREEN, alpha=0.7, label="Wins", edgecolor="none")
+    ax1.hist(df.loc[df["Loss"], "Duration"], bins=40, color=RED, alpha=0.7, label="Losses", edgecolor="none")
+    ax1.set_title("TRADE DURATION DISTRIBUTION", fontsize=11, fontweight="bold")
+    ax1.set_xlabel("Duration (minutes)")
+    ax1.set_ylabel("Number of Trades")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+
+    ax2 = axes[1]
+    colors = [GREEN if w else RED for w in df["Win"]]
+    ax2.scatter(df["Duration"], df["PnL"], c=colors, alpha=0.3, s=15, edgecolors="none")
+    ax2.axhline(y=0, color=GREY, alpha=0.5)
+    ax2.set_title("DURATION vs PROFIT AND LOSS", fontsize=11, fontweight="bold")
+    ax2.set_xlabel("Duration (minutes)")
+    ax2.set_ylabel("Profit and Loss ($)")
+    ax2.grid(True, alpha=0.3)
+    ax2.text(0.98, 0.95,
+             "Winning trades (green) tend to take\n"
+             "longer as price travels to TP.\n"
+             "Losing trades (red) are often shorter\n"
+             "as SL is closer than TP.",
+             transform=ax2.transAxes, fontsize=8, color=GREY, va="top", ha="right",
+             bbox=dict(boxstyle="round,pad=0.4", facecolor=DARK_BG, edgecolor="#2a2e3a", alpha=0.9))
+    plt.tight_layout()
+    fig.savefig(os.path.join(out_dir, "trade duration analysis.png"))
+    plt.close()
+    print("  [done] trade duration analysis.png")
+
+
+def chart_improvement_projections(df, out_dir):
+    init_bal = df["Balance Pre ($)"].iloc[0]
+
+    weekday_pnl = df.groupby("Entry Weekday")["PnL"].sum()
+    day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    weekday_pnl = weekday_pnl.reindex(day_order).fillna(0)
+    worst_day = weekday_pnl.idxmin()
+
+    hourly_pnl = df.groupby("Entry Hour")["PnL"].sum()
+    worst_hour = hourly_pnl.idxmin()
+
+    base_equity = init_bal + df["PnL"].cumsum()
+    no_worst_day = init_bal + df.loc[df["Entry Weekday"] != worst_day, "PnL"].cumsum()
+    no_worst_hour = init_bal + df.loc[df["Entry Hour"] != worst_hour, "PnL"].cumsum()
+
+    fig, axes = plt.subplots(2, 2, figsize=(18, 12))
+
+    ax = axes[0, 0]
+    colors = [RED if p < 0 else GREEN for p in weekday_pnl.values]
+    ax.bar(range(5), weekday_pnl.values, color=colors, alpha=0.8)
+    ax.set_xticks(range(5))
+    ax.set_xticklabels(["Mon", "Tue", "Wed", "Thu", "Fri"])
+    ax.set_title("TOTAL PnL BY WEEKDAY", fontsize=11, fontweight="bold")
+    ax.set_ylabel("Total PnL ($)")
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+    ax.grid(True, alpha=0.3, axis="y")
+    for i, v in enumerate(weekday_pnl.values):
+        ax.text(i, v + (abs(v) * 0.02 if v >= 0 else -abs(v) * 0.06), fmt_money(v),
+                ha="center", fontsize=8, color=WHITE)
+
+    ax = axes[0, 1]
+    ax.plot(range(len(base_equity)), base_equity.values, color=CYAN, linewidth=0.8, alpha=0.6, label="Full Equity")
+    ax.plot(range(len(no_worst_day)), no_worst_day.values, color=GOLD, linewidth=1.2, label=f"Without {worst_day}")
+    ax.set_title(f"PROJECTION: Remove {worst_day.upper()} ({fmt_money(weekday_pnl[worst_day])} total)", fontsize=10, fontweight="bold")
+    ax.set_xlabel("Trade Number")
+    ax.set_ylabel("Balance ($)")
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+    final_without_day = no_worst_day.iloc[-1]
+    diff_day = final_without_day - base_equity.iloc[-1]
+    pct_day = (diff_day / base_equity.iloc[-1]) * 100
+    ax.text(0.02, 0.95,
+            f"Final balance without {worst_day}: {fmt_money(final_without_day)}\nDifference: {fmt_money(diff_day)} ({pct_day:+.1f}%)",
+            transform=ax.transAxes, fontsize=8, color=WHITE, va="top",
+            bbox=dict(boxstyle="round,pad=0.4", facecolor=DARK_BG, edgecolor="#2a2e3a", alpha=0.9))
+
+    ax = axes[1, 0]
+    hours_sorted = sorted(hourly_pnl.index)
+    h_vals = [hourly_pnl[h] for h in hours_sorted]
+    h_colors = [RED if p < 0 else GREEN for p in h_vals]
+    h_labels = [hour_range(h) for h in hours_sorted]
+    ax.bar(range(len(hours_sorted)), h_vals, color=h_colors, alpha=0.8)
+    ax.set_xticks(range(len(hours_sorted)))
+    ax.set_xticklabels(h_labels, rotation=45, ha="right")
+    ax.set_title("TOTAL PnL BY HOUR RANGE", fontsize=11, fontweight="bold")
+    ax.set_ylabel("Total PnL ($)")
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+    ax.grid(True, alpha=0.3, axis="y")
+
+    ax = axes[1, 1]
+    ax.plot(range(len(base_equity)), base_equity.values, color=CYAN, linewidth=0.8, alpha=0.6, label="Full Equity")
+    ax.plot(range(len(no_worst_hour)), no_worst_hour.values, color=GOLD, linewidth=1.2, label=f"Without {hour_range(worst_hour)}")
+    ax.set_title(f"PROJECTION: Remove {hour_range(worst_hour)} ({fmt_money(hourly_pnl[worst_hour])} total)", fontsize=10, fontweight="bold")
+    ax.set_xlabel("Trade Number")
+    ax.set_ylabel("Balance ($)")
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+    final_without_hour = no_worst_hour.iloc[-1]
+    diff_hour = final_without_hour - base_equity.iloc[-1]
+    pct_hour = (diff_hour / base_equity.iloc[-1]) * 100
+    ax.text(0.02, 0.95,
+            f"Final balance without {hour_range(worst_hour)}: {fmt_money(final_without_hour)}\nDifference: {fmt_money(diff_hour)} ({pct_hour:+.1f}%)",
+            transform=ax.transAxes, fontsize=8, color=WHITE, va="top",
+            bbox=dict(boxstyle="round,pad=0.4", facecolor=DARK_BG, edgecolor="#2a2e3a", alpha=0.9))
+
+    fig.suptitle("IMPROVEMENT PROJECTIONS — What if we removed the weakest slots?",
+                 fontsize=14, fontweight="bold", y=1.01)
+    plt.tight_layout()
+    fig.savefig(os.path.join(out_dir, "improvement projections.png"), bbox_inches="tight")
+    plt.close()
+    print("  [done] improvement projections.png")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  MAIN
+# ══════════════════════════════════════════════════════════════════════════════
+
+def main():
+    if len(sys.argv) < 2:
+        print("\n  Usage: python3 trade_journal_analyzer.py <path_to_trades.csv>\n")
+        sys.exit(1)
+
+    csv_path = sys.argv[1]
+    if not os.path.exists(csv_path):
+        print(f"  [ERROR] File not found: {csv_path}")
+        sys.exit(1)
+
+    out_root = "TradeJournal_Report"
+    reports_dir = os.path.join(out_root, "reports")
+    charts_dir = os.path.join(out_root, "charts")
+    os.makedirs(reports_dir, exist_ok=True)
+    os.makedirs(charts_dir, exist_ok=True)
+
+    print("=" * 60)
+    print("  TRADE JOURNAL ANALYZER")
+    print(f"  {AUTHOR}")
+    print("=" * 60)
+    print(f"\n  Input:  {csv_path}")
+    print(f"  Output: {out_root}/")
+    print(f"          ├── reports/")
+    print(f"          └── charts/\n")
+
+    print("  Loading trades...")
+    df = load_trades(csv_path)
+    print(f"  Loaded {len(df)} trades.\n")
+
+    print("  ── GENERATING REPORTS ──\n")
+    report_overall_summary(df, reports_dir)
+    report_monthly_breakdown(df, reports_dir)
+    report_weekly_breakdown(df, reports_dir)
+    report_daily_breakdown(df, reports_dir)
+    report_drawdown_recovery(df, reports_dir)
+    report_streak_analysis(df, reports_dir)
+    report_direction_analysis(df, reports_dir)
+    report_time_analysis(df, reports_dir)
+    report_trade_duration(df, reports_dir)
+    report_distribution(df, reports_dir)
+    report_consistency(df, reports_dir)
+    report_edge_expectancy(df, reports_dir)
+    report_best_worst(df, reports_dir)
+
+    print("\n  ── GENERATING CHARTS ──\n")
+    chart_equity_curve(df, charts_dir)
+    chart_drawdown(df, charts_dir)
+    chart_underwater(df, charts_dir)
+    chart_monthly_heatmap(df, charts_dir)
+    chart_win_rate_by_hour(df, charts_dir)
+    chart_cumulative_return(df, charts_dir)
+    chart_direction_comparison(df, charts_dir)
+    chart_risk_vs_return(df, charts_dir)
+    chart_duration_analysis(df, charts_dir)
+    chart_improvement_projections(df, charts_dir)
+
+    print("\n" + "=" * 60)
+    print(f"  COMPLETE — All output saved to: {out_root}/")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    main()
