@@ -1,0 +1,61 @@
+================================================================================
+  WIN AND LOSS STREAK ANALYSIS
+  Michele Piazzoli — Data Analysis
+================================================================================
+
+────────────────────────────────────────────────────────────
+  WIN STREAKS
+────────────────────────────────────────────────────────────
+  Longest Win Streak:       6 trades
+  Average Win Streak:       1.54 trades
+  Median Win Streak:        1.0 trades
+  Total Win Streaks:        216
+
+  Top 10 Win Streaks:
+    # 1    6 wins  |  PnL:    $+52,500.00  |  Ended: 2025-06-05
+    # 2    4 wins  |  PnL:    $+35,000.00  |  Ended: 2024-12-02
+    # 3    4 wins  |  PnL:    $+35,000.00  |  Ended: 2025-04-02
+    # 4    4 wins  |  PnL:    $+35,000.00  |  Ended: 2025-05-29
+    # 5    4 wins  |  PnL:    $+35,000.00  |  Ended: 2025-08-06
+    # 6    4 wins  |  PnL:    $+35,000.00  |  Ended: 2025-11-05
+    # 7    3 wins  |  PnL:     $+4,599.02  |  Ended: 2024-01-04
+    # 8    3 wins  |  PnL:    $+11,103.72  |  Ended: 2024-03-06
+    # 9    3 wins  |  PnL:     $+3,517.97  |  Ended: 2024-04-23
+    #10    3 wins  |  PnL:     $+6,559.94  |  Ended: 2024-05-07
+
+
+────────────────────────────────────────────────────────────
+  LOSS STREAKS
+────────────────────────────────────────────────────────────
+  Longest Loss Streak:      16 trades
+  Average Loss Streak:      2.84 trades
+  Median Loss Streak:       2.0 trades
+  Total Loss Streaks:       217
+
+  Top 10 Loss Streaks:
+    # 1   16 losses  |  PnL:    $-23,945.48  |  Ended: 2024-03-20
+    # 2   11 losses  |  PnL:     $-5,243.54  |  Ended: 2024-04-03
+    # 3   10 losses  |  PnL:    $-35,000.00  |  Ended: 2025-05-09
+    # 4    8 losses  |  PnL:    $-28,000.00  |  Ended: 2024-11-08
+    # 5    8 losses  |  PnL:    $-28,000.00  |  Ended: 2025-07-22
+    # 6    8 losses  |  PnL:    $-28,000.00  |  Ended: 2025-09-08
+    # 7    8 losses  |  PnL:    $-28,000.00  |  Ended: 2025-12-04
+    # 8    8 losses  |  PnL:    $-28,000.00  |  Ended: 2026-01-15
+    # 9    8 losses  |  PnL:    $-28,000.00  |  Ended: 2026-01-29
+    #10    7 losses  |  PnL:    $-11,188.73  |  Ended: 2024-03-12
+
+
+────────────────────────────────────────────────────────────
+  STREAK LENGTH DISTRIBUTION
+────────────────────────────────────────────────────────────
+    Length  1:  Win streaks: 134  |  Loss streaks:  69
+    Length  2:  Win streaks:  56  |  Loss streaks:  60
+    Length  3:  Win streaks:  20  |  Loss streaks:  28
+    Length  4:  Win streaks:   5  |  Loss streaks:  23
+    Length  5:  Win streaks:   0  |  Loss streaks:  10
+    Length  6:  Win streaks:   1  |  Loss streaks:  10
+    Length  7:  Win streaks:   0  |  Loss streaks:   8
+    Length  8:  Win streaks:   0  |  Loss streaks:   6
+    Length 10:  Win streaks:   0  |  Loss streaks:   1
+    Length 11:  Win streaks:   0  |  Loss streaks:   1
+    Length 16:  Win streaks:   0  |  Loss streaks:   1
