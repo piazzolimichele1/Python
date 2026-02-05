@@ -1,0 +1,185 @@
+================================================================================
+  DRAWDOWN AND RECOVERY ANALYSIS
+  Michele Piazzoli — Data Analysis
+================================================================================
+
+  CLASSIFICATION CRITERIA:
+  Drawdown events are ranked by the absolute dollar amount lost
+  from peak to trough. Only fully recovered drawdowns are listed.
+  Each event shows the peak balance before the drawdown began,
+  the lowest point reached (trough), the percentage decline,
+  and how many trades it took to fully recover to a new peak.
+  Ongoing (unrecovered) drawdowns are excluded from this analysis
+  because recovery metrics cannot be measured yet.
+
+────────────────────────────────────────────────────────────
+  SUMMARY
+────────────────────────────────────────────────────────────
+  Maximum Drawdown ($):            $-57,750.00
+  Maximum Drawdown (%):            -27.00%
+  Average Drawdown ($):            $-15,596.33
+  Average Drawdown (%):            -6.41%
+  Trades Underwater:               802/948 (84.6%)
+  Total Recovered Drawdown Events: 98
+
+────────────────────────────────────────────────────────────
+  TOP 15 DRAWDOWN EVENTS (ranked by dollar loss)
+────────────────────────────────────────────────────────────
+
+  #1
+    Peak Balance:         $+535,830.53
+    Trough Balance:       $+485,080.53
+    Maximum Drawdown:     $-50,750.00 (-9.47%)
+    Start Date:           2025-08-13
+    Trough Date:          2025-08-25
+    Recovery Date:        2025-09-22
+    Total Duration:       92 trades
+    Recovery Duration:    61 trades (from trough to new peak)
+
+  #2
+    Peak Balance:         $+383,580.53
+    Trough Balance:       $+341,580.53
+    Maximum Drawdown:     $-42,000.00 (-10.95%)
+    Start Date:           2025-05-07
+    Trough Date:          2025-05-14
+    Recovery Date:        2025-05-29
+    Total Duration:       47 trades
+    Recovery Duration:    29 trades (from trough to new peak)
+
+  #3
+    Peak Balance:         $+479,830.53
+    Trough Balance:       $+441,330.53
+    Maximum Drawdown:     $-38,500.00 (-8.02%)
+    Start Date:           2025-07-07
+    Trough Date:          2025-07-22
+    Recovery Date:        2025-07-25
+    Total Duration:       48 trades
+    Recovery Duration:    10 trades (from trough to new peak)
+
+  #4
+    Peak Balance:         $+698,580.53
+    Trough Balance:       $+661,830.53
+    Maximum Drawdown:     $-36,750.00 (-5.26%)
+    Start Date:           2025-12-02
+    Trough Date:          2025-12-05
+    Recovery Date:        2025-12-17
+    Total Duration:       34 trades
+    Recovery Duration:    21 trades (from trough to new peak)
+
+  #5
+    Peak Balance:         $+132,769.47
+    Trough Balance:       $+96,916.81
+    Maximum Drawdown:     $-35,852.66 (-27.00%)
+    Start Date:           2024-03-15
+    Trough Date:          2024-04-03
+    Recovery Date:        2024-07-08
+    Total Duration:       173 trades
+    Recovery Duration:    122 trades (from trough to new peak)
+
+  #6
+    Peak Balance:         $+208,580.53
+    Trough Balance:       $+180,580.53
+    Maximum Drawdown:     $-28,000.00 (-13.42%)
+    Start Date:           2024-11-06
+    Trough Date:          2024-11-08
+    Recovery Date:        2024-11-12
+    Total Duration:       16 trades
+    Recovery Duration:    9 trades (from trough to new peak)
+
+  #7
+    Peak Balance:         $+577,830.53
+    Trough Balance:       $+553,330.53
+    Maximum Drawdown:     $-24,500.00 (-4.24%)
+    Start Date:           2025-10-02
+    Trough Date:          2025-10-07
+    Recovery Date:        2025-10-09
+    Total Duration:       19 trades
+    Recovery Duration:    6 trades (from trough to new peak)
+
+  #8
+    Peak Balance:         $+709,080.53
+    Trough Balance:       $+684,580.53
+    Maximum Drawdown:     $-24,500.00 (-3.46%)
+    Start Date:           2025-12-24
+    Trough Date:          2025-12-29
+    Recovery Date:        2025-12-31
+    Total Duration:       12 trades
+    Recovery Duration:    6 trades (from trough to new peak)
+
+  #9
+    Peak Balance:         $+716,080.53
+    Trough Balance:       $+695,080.53
+    Maximum Drawdown:     $-21,000.00 (-2.93%)
+    Start Date:           2026-01-02
+    Trough Date:          2026-01-05
+    Recovery Date:        2026-01-06
+    Total Duration:       8 trades
+    Recovery Duration:    3 trades (from trough to new peak)
+
+  #10
+    Peak Balance:         $+549,830.53
+    Trough Balance:       $+530,580.53
+    Maximum Drawdown:     $-19,250.00 (-3.50%)
+    Start Date:           2025-09-24
+    Trough Date:          2025-09-26
+    Recovery Date:        2025-09-29
+    Total Duration:       11 trades
+    Recovery Duration:    3 trades (from trough to new peak)
+
+  #11
+    Peak Balance:         $+178,830.53
+    Trough Balance:       $+161,330.53
+    Maximum Drawdown:     $-17,500.00 (-9.79%)
+    Start Date:           2024-10-02
+    Trough Date:          2024-10-03
+    Recovery Date:        2024-10-08
+    Total Duration:       13 trades
+    Recovery Duration:    9 trades (from trough to new peak)
+
+  #12
+    Peak Balance:         $+198,080.53
+    Trough Balance:       $+180,580.53
+    Maximum Drawdown:     $-17,500.00 (-8.83%)
+    Start Date:           2024-11-01
+    Trough Date:          2024-11-04
+    Recovery Date:        2024-11-06
+    Total Duration:       9 trades
+    Recovery Duration:    5 trades (from trough to new peak)
+
+  #13
+    Peak Balance:         $+238,330.53
+    Trough Balance:       $+220,830.53
+    Maximum Drawdown:     $-17,500.00 (-7.34%)
+    Start Date:           2024-12-03
+    Trough Date:          2024-12-03
+    Recovery Date:        2024-12-03
+    Total Duration:       6 trades
+    Recovery Duration:    2 trades (from trough to new peak)
+
+  #14
+    Peak Balance:         $+507,830.53
+    Trough Balance:       $+492,080.53
+    Maximum Drawdown:     $-15,750.00 (-3.10%)
+    Start Date:           2025-08-01
+    Trough Date:          2025-08-04
+    Recovery Date:        2025-08-05
+    Total Duration:       12 trades
+    Recovery Duration:    5 trades (from trough to new peak)
+
+  #15
+    Peak Balance:         $+268,080.53
+    Trough Balance:       $+254,080.53
+    Maximum Drawdown:     $-14,000.00 (-5.22%)
+    Start Date:           2025-02-03
+    Trough Date:          2025-02-03
+    Recovery Date:        2025-02-04
+    Total Duration:       5 trades
+    Recovery Duration:    2 trades (from trough to new peak)
+
+────────────────────────────────────────────────────────────
+  RECOVERY STATISTICS
+────────────────────────────────────────────────────────────
+  Average Recovery Time:           4.4 trades
+  Fastest Recovery:                1 trades
+  Slowest Recovery:                122 trades
+  Average Total Drawdown Duration: 7.8 trades
